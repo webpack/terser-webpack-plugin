@@ -178,7 +178,7 @@ Default number of concurrent runs: `os.cpus().length - 1` or `os.availableParall
 
 > **Warning**
 >
-> If you use **Circle CI** or any other environment that doesn't provide the real available count of CPUs then you need to explicitly set up the number of CPUs to avoid `Error: Call retries were exceeded` (see [#143](https://github.com/webpack-contrib/terser-webpack-plugin/issues/143), [#202](https://github.com/webpack-contrib/terser-webpack-plugin/issues/202)).
+> If you use **Circle CI** or any other environment that doesn't provide the real available count of CPUs then you need to explicitly set up the number of CPUs to avoid `Error: Call retries were exceeded` (see [#143](https://github.com/webpack/terser-webpack-plugin/issues/143), [#202](https://github.com/webpack/terser-webpack-plugin/issues/202)).
 
 #### `boolean`
 
@@ -924,10 +924,10 @@ If you're new here, please take a moment to review our contributing guidelines b
 [npm-url]: https://npmjs.com/package/terser-webpack-plugin
 [node]: https://img.shields.io/node/v/terser-webpack-plugin.svg
 [node-url]: https://nodejs.org
-[tests]: https://github.com/webpack-contrib/terser-webpack-plugin/workflows/terser-webpack-plugin/badge.svg
-[tests-url]: https://github.com/webpack-contrib/terser-webpack-plugin/actions
-[cover]: https://codecov.io/gh/webpack-contrib/terser-webpack-plugin/branch/master/graph/badge.svg
-[cover-url]: https://codecov.io/gh/webpack-contrib/terser-webpack-plugin
+[tests]: https://github.com/webpack/terser-webpack-plugin/workflows/terser-webpack-plugin/badge.svg
+[tests-url]: https://github.com/webpack/terser-webpack-plugin/actions
+[cover]: https://codecov.io/gh/webpack/terser-webpack-plugin/branch/main/graph/badge.svg
+[cover-url]: https://codecov.io/gh/webpack/terser-webpack-plugin
 [discussion]: https://img.shields.io/github/discussions/webpack/webpack
 [discussion-url]: https://github.com/webpack/webpack/discussions
 [size]: https://packagephobia.now.sh/badge?p=terser-webpack-plugin
