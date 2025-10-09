@@ -5,7 +5,7 @@ exports[`validation validate 1`] = `
  - options.test should be one of these:
    [RegExp | non-empty string, ...] | RegExp | non-empty string
    -> Filtering rules.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#test
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#test
    Details:
     * options.test should be an array:
       [RegExp | non-empty string, ...]
@@ -22,7 +22,7 @@ exports[`validation validate 2`] = `
  - options.test should be one of these:
    [RegExp | non-empty string, ...] | RegExp | non-empty string
    -> Filtering rules.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#test
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#test
    Details:
     * options.test[0] should be one of these:
       RegExp | non-empty string
@@ -37,7 +37,7 @@ exports[`validation validate 3`] = `
  - options.include should be one of these:
    [RegExp | non-empty string, ...] | RegExp | non-empty string
    -> Filtering rules.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#include
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#include
    Details:
     * options.include should be an array:
       [RegExp | non-empty string, ...]
@@ -54,7 +54,7 @@ exports[`validation validate 4`] = `
  - options.include should be one of these:
    [RegExp | non-empty string, ...] | RegExp | non-empty string
    -> Filtering rules.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#include
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#include
    Details:
     * options.include[0] should be one of these:
       RegExp | non-empty string
@@ -69,7 +69,7 @@ exports[`validation validate 5`] = `
  - options.exclude should be one of these:
    [RegExp | non-empty string, ...] | RegExp | non-empty string
    -> Filtering rules.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#exclude
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#exclude
    Details:
     * options.exclude should be an array:
       [RegExp | non-empty string, ...]
@@ -86,7 +86,7 @@ exports[`validation validate 6`] = `
  - options.exclude should be one of these:
    [RegExp | non-empty string, ...] | RegExp | non-empty string
    -> Filtering rules.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#exclude
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#exclude
    Details:
     * options.exclude[0] should be one of these:
       RegExp | non-empty string
@@ -101,7 +101,7 @@ exports[`validation validate 7`] = `
  - options.parallel should be one of these:
    boolean | integer
    -> Use multi-process parallel running to improve the build speed.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#parallel
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#parallel
    Details:
     * options.parallel should be a boolean.
     * options.parallel should be an integer."
@@ -112,7 +112,7 @@ exports[`validation validate 8`] = `
  - options.parallel should be one of these:
    boolean | integer
    -> Use multi-process parallel running to improve the build speed.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#parallel
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#parallel
    Details:
     * options.parallel should be a boolean.
     * options.parallel should be an integer."
@@ -122,7 +122,7 @@ exports[`validation validate 9`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
  - options.minify should be an instance of function.
    -> Allows you to override default minify function.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#number"
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#number"
 `;
 
 exports[`validation validate 10`] = `
@@ -130,7 +130,7 @@ exports[`validation validate 10`] = `
  - options.terserOptions should be an object:
    object { … }
    -> Options for \`terser\` (by default) or custom \`minify\` function.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#terseroptions"
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#terseroptions"
 `;
 
 exports[`validation validate 11`] = `
@@ -138,12 +138,12 @@ exports[`validation validate 11`] = `
  - options.extractComments should be one of these:
    boolean | non-empty string | RegExp | function | object { condition?, filename?, banner? }
    -> Whether comments shall be extracted to a separate file.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#extractcomments
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#extractcomments
    Details:
     * options.extractComments.condition should be one of these:
       boolean | non-empty string | RegExp | function
       -> Condition what comments you need extract.
-      -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#condition
+      -> Read more at https://github.com/webpack/terser-webpack-plugin#condition
       Details:
        * options.extractComments.condition should be a boolean.
        * options.extractComments.condition should be a non-empty string.
@@ -156,12 +156,12 @@ exports[`validation validate 12`] = `
  - options.extractComments should be one of these:
    boolean | non-empty string | RegExp | function | object { condition?, filename?, banner? }
    -> Whether comments shall be extracted to a separate file.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#extractcomments
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#extractcomments
    Details:
     * options.extractComments.filename should be one of these:
       non-empty string | function
       -> The file where the extracted comments will be stored. Default is to append the suffix .LICENSE.txt to the original filename.
-      -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#filename
+      -> Read more at https://github.com/webpack/terser-webpack-plugin#filename
       Details:
        * options.extractComments.filename should be a non-empty string.
        * options.extractComments.filename should be an instance of function."
@@ -172,12 +172,12 @@ exports[`validation validate 13`] = `
  - options.extractComments should be one of these:
    boolean | non-empty string | RegExp | function | object { condition?, filename?, banner? }
    -> Whether comments shall be extracted to a separate file.
-   -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#extractcomments
+   -> Read more at https://github.com/webpack/terser-webpack-plugin#extractcomments
    Details:
     * options.extractComments.banner should be one of these:
       boolean | non-empty string | function
       -> The banner text that points to the extracted file and will be added on top of the original file
-      -> Read more at https://github.com/webpack-contrib/terser-webpack-plugin#banner
+      -> Read more at https://github.com/webpack/terser-webpack-plugin#banner
       Details:
        * options.extractComments.banner should be a boolean.
        * options.extractComments.banner should be a non-empty string.

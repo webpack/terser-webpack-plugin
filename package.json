@@ -19,9 +19,9 @@
     "optimize",
     "optimizer"
   ],
-  "homepage": "https://github.com/webpack-contrib/terser-webpack-plugin",
-  "bugs": "https://github.com/webpack-contrib/terser-webpack-plugin/issues",
-  "repository": "webpack-contrib/terser-webpack-plugin",
+  "homepage": "https://github.com/webpack/terser-webpack-plugin",
+  "bugs": "https://github.com/webpack/terser-webpack-plugin/issues",
+  "repository": "webpack/terser-webpack-plugin",
   "funding": {
     "type": "opencollective",
     "url": "https://opencollective.com/webpack"
@@ -40,7 +40,7 @@
     "build:types": "tsc --declaration --emitDeclarationOnly --outDir types && prettier \"types/**/*.ts\" --write",
     "build:code": "cross-env NODE_ENV=production babel src -d dist --copy-files",
     "build": "npm-run-all -p \"build:**\"",
-    "commitlint": "commitlint --from=master",
+    "commitlint": "commitlint --from=main",
     "security": "npm audit --production",
     "lint:prettier": "prettier --list-different .",
     "lint:code": "eslint --cache .",
