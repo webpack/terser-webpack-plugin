@@ -183,7 +183,7 @@ type MinimizedResult = {
   /**
    * code
    */
-  code: string;
+  code?: string | undefined;
   /**
    * source map
    */

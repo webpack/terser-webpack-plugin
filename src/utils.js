@@ -243,7 +243,13 @@ async function terserMinify(
       // toplevel: terserOptions.toplevel
     });
 
-  const { minify } = require("terser");
+  let minify;
+
+  try {
+    ({ minify } = require("terser"));
+  } catch (err) {
+    return { errors: [/** @type {Error} */ (err)] };
+  }
 
   // Copy `terser` options
   const terserOptions = buildTerserOptions(minimizerOptions);
@@ -487,7 +493,13 @@ async function uglifyJsMinify(
     };
   };
 
-  const { minify } = require("uglify-js");
+  let minify;
+
+  try {
+    ({ minify } = require("uglify-js"));
+  } catch (err) {
+    return { errors: [/** @type {Error} */ (err)] };
+  }
 
   // Copy `uglify-js` options
   const uglifyJsOptions = buildUglifyJsOptions(minimizerOptions);
@@ -578,7 +590,13 @@ async function swcMinify(input, sourceMap, minimizerOptions) {
       sourceMap: undefined,
     });
 
-  const swc = require("@swc/core");
+  let swc;
+
+  try {
+    swc = require("@swc/core");
+  } catch (err) {
+    return { errors: [/** @type {Error} */ (err)] };
+  }
 
   // Copy `swc` options
   const swcOptions = buildSwcOptions(minimizerOptions);
@@ -673,7 +691,13 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
     };
   };
 
-  const esbuild = require("esbuild");
+  let esbuild;
+
+  try {
+    esbuild = require("esbuild");
+  } catch (err) {
+    return { errors: [/** @type {Error} */ (err)] };
+  }
 
   // Copy `esbuild` options
   const esbuildOptions = buildEsbuildOptions(minimizerOptions);

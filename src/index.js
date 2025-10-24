@@ -69,7 +69,7 @@ const {
 
 /**
  * @typedef {object} MinimizedResult
- * @property {string} code code
+ * @property {string=} code code
  * @property {RawSourceMap=} map source map
  * @property {Array<Error | string>=} errors errors
  * @property {Array<Error | string>=} warnings warnings
