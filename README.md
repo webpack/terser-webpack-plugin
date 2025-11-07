@@ -914,7 +914,7 @@ module.exports = {
 We welcome all contributions!
 If you're new here, please take a moment to review our contributing guidelines before submitting issues or pull requests.
 
-[CONTRIBUTING](./.github/CONTRIBUTING.md)
+[CONTRIBUTING](https://github.com/webpack/terser-webpack-plugin?tab=contributing-ov-file#contributing)
 
 ## License
 
