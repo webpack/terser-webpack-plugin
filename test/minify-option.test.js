@@ -157,6 +157,22 @@ describe("minify option", () => {
     expect(getWarnings(stats)).toMatchSnapshot("warnings");
   });
 
+  it("should output errors and warning", async () => {
+    const compiler = getCompiler();
+
+    new TerserPlugin({
+      minify: () => ({
+        errors: [new Error("error")],
+        warnings: [new Error("warning")],
+      }),
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toMatchSnapshot("errors");
+    expect(getWarnings(stats)).toMatchSnapshot("warnings");
+  });
+
   it("should snapshot with extracting comments", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/minify/es5.js"),

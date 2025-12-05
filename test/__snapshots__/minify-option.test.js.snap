@@ -1,5 +1,20 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`minify option should output errors and warning: errors 1`] = `
+Array [
+  "Error: main.js from Terser plugin
+Minimizer doesn't return result",
+  "Error: main.js from Terser plugin
+error",
+]
+`;
+
+exports[`minify option should output errors and warning: warnings 1`] = `
+Array [
+  "Warning: Error: warning",
+]
+`;
+
 exports[`minify option should snapshot with extracting comments: assets 1`] = `
 Object {
   "main.js": "/*! For license information please see main.js.LICENSE.txt */
@@ -400,6 +415,8 @@ exports[`minify option should work using when the \`minify\` option is \`uglifyJ
 Array [
   "Error: broken.js from Terser plugin
 Minimizer doesn't return result",
+  "Error: broken.js from Terser plugin
+Unterminated template literal [broken.js:1,undefined]",
 ]
 `;
 
