@@ -3377,8 +3377,14 @@ exports[`TerserPlugin should work, extract comments in one file and use memory c
 
 exports[`TerserPlugin should write stdout and stderr of workers to stdout and stderr of main process in not parallel mode: assets 1`] = `
 Object {
-  "one.js": "",
-  "two.js": "",
+  "one.js": "/******/ (() => { // webpackBootstrap
+
+/******/ })()
+;",
+  "two.js": "/******/ (() => { // webpackBootstrap
+
+/******/ })()
+;",
 }
 `;
 
@@ -3400,8 +3406,14 @@ exports[`TerserPlugin should write stdout and stderr of workers to stdout and st
 
 exports[`TerserPlugin should write stdout and stderr of workers to stdout and stderr of main process in parallel mode: assets 1`] = `
 Object {
-  "one.js": "",
-  "two.js": "",
+  "one.js": "/******/ (() => { // webpackBootstrap
+
+/******/ })()
+;",
+  "two.js": "/******/ (() => { // webpackBootstrap
+
+/******/ })()
+;",
 }
 `;
 

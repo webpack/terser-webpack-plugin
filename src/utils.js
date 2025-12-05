@@ -523,7 +523,6 @@ async function uglifyJsMinify(
 
   return {
     code: result.code,
-
     map: result.map ? JSON.parse(result.map) : undefined,
     errors: result.error ? [result.error] : [],
     warnings: result.warnings || [],
