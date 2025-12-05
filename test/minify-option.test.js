@@ -162,8 +162,8 @@ describe("minify option", () => {
 
     new TerserPlugin({
       minify: () => ({
-        errors: [new Error("error")],
-        warnings: [new Error("warning")],
+        errors: ["error"],
+        warnings: ["warning"],
       }),
     }).apply(compiler);
 

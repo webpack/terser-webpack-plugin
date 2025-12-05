@@ -596,24 +596,24 @@ class TerserPlugin {
             );
           }
 
-          let shebang;
-
-          if (
-            /** @type {ExtractCommentsObject} */
-            (this.options.extractComments).banner !== false &&
-            output.extractedComments &&
-            output.extractedComments.length > 0 &&
-            output.code.startsWith("#!")
-          ) {
-            const firstNewlinePosition = output.code.indexOf("\n");
-
-            shebang = output.code.slice(0, Math.max(0, firstNewlinePosition));
-            output.code = output.code.slice(
-              Math.max(0, firstNewlinePosition + 1),
-            );
-          }
-
           if (output.code) {
+            let shebang;
+
+            if (
+              /** @type {ExtractCommentsObject} */
+              (this.options.extractComments).banner !== false &&
+              output.extractedComments &&
+              output.extractedComments.length > 0 &&
+              output.code.startsWith("#!")
+            ) {
+              const firstNewlinePosition = output.code.indexOf("\n");
+
+              shebang = output.code.slice(0, Math.max(0, firstNewlinePosition));
+              output.code = output.code.slice(
+                Math.max(0, firstNewlinePosition + 1),
+              );
+            }
+
             if (output.map) {
               output.source = new SourceMapSource(
                 output.code,

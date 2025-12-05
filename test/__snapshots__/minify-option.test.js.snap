@@ -11,7 +11,7 @@ error",
 
 exports[`minify option should output errors and warning: warnings 1`] = `
 Array [
-  "Warning: Error: warning",
+  "Warning: warning",
 ]
 `;
 
