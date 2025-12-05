@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [5.3.15](https://github.com/webpack/terser-webpack-plugin/compare/v5.3.14...v5.3.15) (2025-12-05)
+
+
+### Bug Fixes
+
+* catch error when loading minimizers ([#639](https://github.com/webpack/terser-webpack-plugin/issues/639)) ([586af0a](https://github.com/webpack/terser-webpack-plugin/commit/586af0aa31859e8af37da455e0050c33b62bc645))
+* respect errors and warnings from minimizer without code ([8607f79](https://github.com/webpack/terser-webpack-plugin/commit/8607f79c87bf07fc337631a6ccfb84415034afae))
+
 ### [5.3.14](https://github.com/webpack-contrib/terser-webpack-plugin/compare/v5.3.13...v5.3.14) (2025-03-06)
 
 
