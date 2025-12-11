@@ -596,7 +596,7 @@ class TerserPlugin {
             );
           }
 
-          if (output.code) {
+          if (typeof output.code !== "undefined") {
             let shebang;
 
             if (

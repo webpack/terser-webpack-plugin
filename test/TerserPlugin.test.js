@@ -177,6 +177,20 @@ describe("TerserPlugin", () => {
     }
   });
 
+  it("should work with empty files", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "fixtures/empty.js"),
+    });
+
+    new TerserPlugin().apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+    expect(getErrors(stats)).toMatchSnapshot("errors");
+    expect(getWarnings(stats)).toMatchSnapshot("warnings");
+  });
+
   it("should work when some of assets do not contain source maps", async () => {
     const compiler = getCompiler({
       devtool: "source-map",

@@ -1739,6 +1739,16 @@ exports[`TerserPlugin should work with child compilation: errors 1`] = `Array []
 
 exports[`TerserPlugin should work with child compilation: warnings 1`] = `Array []`;
 
+exports[`TerserPlugin should work with empty files: assets 1`] = `
+Object {
+  "main.js": "",
+}
+`;
+
+exports[`TerserPlugin should work with empty files: errors 1`] = `Array []`;
+
+exports[`TerserPlugin should work with empty files: warnings 1`] = `Array []`;
+
 exports[`TerserPlugin should work with multi compiler mode with source maps: assets 1`] = `
 Object {
   "main-1.js": "(()=>{var __webpack_modules__={921:module=>{eval(\\"{// foo\\\\n/* @preserve*/\\\\n// bar\\\\nconst a = (/* unused pure expression or super */ null && (2 + 2));\\\\n\\\\nmodule.exports = function Foo() {\\\\n  const b = 2 + 2;\\\\n  console.log(b + 1 + 2);\\\\n};\\\\n\\\\n\\\\n//# sourceURL=webpack://terser-webpack-plugin/./test/fixtures/entry.js?\\\\n}\\")}},__webpack_module_cache__={};function __webpack_require__(e){var _=__webpack_module_cache__[e];if(void 0!==_)return _.exports;var r=__webpack_module_cache__[e]={exports:{}};return __webpack_modules__[e](r,r.exports,__webpack_require__),r.exports}var __webpack_exports__=__webpack_require__(921)})();",
@@ -3377,14 +3387,8 @@ exports[`TerserPlugin should work, extract comments in one file and use memory c
 
 exports[`TerserPlugin should write stdout and stderr of workers to stdout and stderr of main process in not parallel mode: assets 1`] = `
 Object {
-  "one.js": "/******/ (() => { // webpackBootstrap
-
-/******/ })()
-;",
-  "two.js": "/******/ (() => { // webpackBootstrap
-
-/******/ })()
-;",
+  "one.js": "",
+  "two.js": "",
 }
 `;
 
@@ -3406,14 +3410,8 @@ exports[`TerserPlugin should write stdout and stderr of workers to stdout and st
 
 exports[`TerserPlugin should write stdout and stderr of workers to stdout and stderr of main process in parallel mode: assets 1`] = `
 Object {
-  "one.js": "/******/ (() => { // webpackBootstrap
-
-/******/ })()
-;",
-  "two.js": "/******/ (() => { // webpackBootstrap
-
-/******/ })()
-;",
+  "one.js": "",
+  "two.js": "",
 }
 `;
 
