@@ -596,7 +596,8 @@ class TerserPlugin {
             );
           }
 
-          if (typeof output.code !== "undefined") {
+          // Custom functions can return `undefined` or `null`
+          if (typeof output.code !== "undefined" && output.code !== null) {
             let shebang;
 
             if (
