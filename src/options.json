@@ -185,6 +185,11 @@
         }
       ]
     },
+    "stage": {
+      "description": "The `compilation.hooks.processAssets` stage to minimize at.",
+      "link": "https://github.com/webpack/minimizer-webpack-plugin#stage",
+      "type": "integer"
+    },
     "minify": {
       "description": "Allows you to override default minify function.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#number",

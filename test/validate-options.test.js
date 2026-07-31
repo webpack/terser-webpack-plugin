@@ -305,6 +305,14 @@ describe("validation", () => {
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
+      new MinimizerPlugin({ stage: 100 });
+    }).not.toThrow();
+
+    expect(() => {
+      new MinimizerPlugin({ stage: "100" });
+    }).toThrowErrorMatchingSnapshot();
+
+    expect(() => {
       new MinimizerPlugin({ unknown: true });
     }).toThrowErrorMatchingSnapshot();
 

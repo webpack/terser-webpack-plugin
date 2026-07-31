@@ -321,6 +321,10 @@ type BasePluginOptions = {
    * parallel option
    */
   parallel?: Parallel | undefined;
+  /**
+   * `compilation.hooks.processAssets` stage to minimize at
+   */
+  stage?: number | undefined;
 };
 type DefinedDefaultMinimizerAndOptions<T> =
   T extends import("terser").MinifyOptions

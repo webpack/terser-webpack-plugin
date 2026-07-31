@@ -160,6 +160,7 @@ const {
  * @property {Rules=} exclude exclude rule
  * @property {ExtractCommentsOptions=} extractComments extract comments options
  * @property {Parallel=} parallel parallel option
+ * @property {number=} stage `compilation.hooks.processAssets` stage to minimize at
  */
 
 /**
@@ -201,6 +202,7 @@ class TerserPlugin {
       parallel = true,
       include,
       exclude,
+      stage,
     } = options || {};
 
     // `terserOptions` is a deprecated alias of `minimizerOptions`; prefer the
@@ -223,6 +225,7 @@ class TerserPlugin {
       parallel,
       include,
       exclude,
+      stage,
       minimizer: {
         implementation: minify,
         options: resolvedMinimizerOptions,
@@ -948,8 +951,12 @@ class TerserPlugin {
       compilation.hooks.processAssets.tapPromise(
         {
           name: pluginName,
+          // A later stage turns this instance into a fallback: minimizers on the
+          // default stage run first and their `minimized` assets are skipped here.
           stage:
-            compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE,
+            typeof this.options.stage !== "undefined"
+              ? this.options.stage
+              : compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE,
           additionalAssets: true,
         },
         (assets) =>

@@ -212,16 +212,23 @@ exports[`validation validate 16`] = `
 
 exports[`validation validate 17`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
- - options has an unknown property 'unknown'. These properties are valid:
-   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, minify? }"
+ - options.stage should be an integer.
+   -> The \`compilation.hooks.processAssets\` stage to minimize at.
+   -> Read more at https://github.com/webpack/minimizer-webpack-plugin#stage"
 `;
 
 exports[`validation validate 18`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
- - options.minimizerOptions should be a non-empty array."
+ - options has an unknown property 'unknown'. These properties are valid:
+   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, stage?, minify? }"
 `;
 
 exports[`validation validate 19`] = `
+"Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
+ - options.minimizerOptions should be a non-empty array."
+`;
+
+exports[`validation validate 20`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
  - options.minimizerOptions should be one of these:
    object { … } | [object { … }, ...] (should not have fewer than 1 item)

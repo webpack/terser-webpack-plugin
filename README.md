@@ -107,6 +107,7 @@ Using supported `devtool` values enable source map generation.
 - **[`include`](#include)**
 - **[`exclude`](#exclude)**
 - **[`parallel`](#parallel)**
+- **[`stage`](#stage)**
 - **[`minify`](#minify)**
 - **[`minimizerOptions`](#minimizeroptions)**
 - **[`extractComments`](#extractcomments)**
@@ -246,6 +247,35 @@ module.exports = {
     minimizer: [
       new MinimizerPlugin({
         parallel: 4,
+      }),
+    ],
+  },
+};
+```
+
+### `stage`
+
+Type:
+
+```ts
+type stage = number;
+```
+
+Default: `compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE`
+
+The [`compilation.hooks.processAssets`](https://webpack.js.org/api/compilation-hooks/#processassets) stage the plugin minimizes at.
+
+Plugins tapping the same stage run in the order they were applied, so raising the
+stage turns an instance into a fallback: other minimizers go first, and assets
+they already marked `minimized` in their asset info are skipped here.
+
+```js
+module.exports = {
+  optimization: {
+    minimizer: [
+      new MinimizerPlugin({
+        stage:
+          require("webpack").Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE + 1,
       }),
     ],
   },
