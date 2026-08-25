@@ -54,6 +54,21 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private optimize;
   /**
+   * Minify one source a module embeds in another language's output — CSS or
+   * HTML reaching the bundle inside a JavaScript string literal, an
+   * `asset/source` file's text, an `asset/inline` payload. No asset carries
+   * this text, so there is no filename to dispatch by: it goes to whichever
+   * minimizer declares `info.type` among the languages it minifies.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {EmbeddedMinimizer<T>} embedded the embedded-source dispatcher
+   * @param {import("webpack").sources.Source} source the embedded source
+   * @param {EmbeddedSourceInfo} info what it is and where it is going
+   * @returns {Promise<import("webpack").sources.Source>} the minified source, or the original
+   */
+  private renderEmbeddedSource;
+  /**
    * @param {Compiler} compiler compiler
    * @returns {void}
    */
@@ -96,6 +111,10 @@ declare namespace TerserPlugin {
     ExtractCommentsObject,
     ExtractCommentsOptions,
     ErrorObject,
+    EmbeddedSourceInfo,
+    EmbeddedSourceHooks,
+    EmbeddedSource,
+    RenderedEmbeddedSource,
     MinimizedResult,
     Input,
     CustomOptions,
@@ -198,6 +217,78 @@ type ErrorObject = {
    */
   stack?: string | undefined;
 };
+/**
+ * What one embedded source is and where it is going, as
+ * `renderEmbeddedSource` describes it.
+ */
+type EmbeddedSourceInfo = {
+  /**
+   * the embedded source's language, e.g. `"css"`
+   */
+  type: string;
+  /**
+   * the language of the output it is embedded in
+   */
+  hostType: string;
+  /**
+   * the module being generated
+   */
+  module: import("webpack").Module;
+};
+/**
+ * The two hooks webpack >= 5.110 adds. Declared here rather than read off
+ * `Compilation`: the plugin supports webpack `^5.1.0`, whose types have
+ * neither, and it does nothing at all where they are absent.
+ */
+type EmbeddedSourceHooks = {
+  /**
+   * offers each embedded source before it is embedded
+   */
+  renderEmbeddedSource?:
+    | {
+        tapPromise: (
+          name: string,
+          fn: (
+            source: import("webpack").sources.Source,
+            info: EmbeddedSourceInfo,
+          ) => Promise<import("webpack").sources.Source>,
+        ) => void;
+      }
+    | undefined;
+  /**
+   * hashes what a `renderEmbeddedSource` tap varies on
+   */
+  embeddedSourceHash?:
+    | {
+        tap: (
+          name: string,
+          fn: (
+            module: import("webpack").Module,
+            hash: {
+              update: (data: string) => void;
+            },
+          ) => void,
+        ) => void;
+      }
+    | undefined;
+};
+/**
+ * One body written in another language that the minified source embeds — an
+ * inline `<style>` or `<script>`, an `<svg>` subtree, a `data:` payload.
+ */
+type EmbeddedSource = {
+  /**
+   * the body's language, e.g. `"css"` / `"javascript"` / `"svg"`
+   */
+  type: string;
+  /**
+   * the body as it was written
+   */
+  source: string;
+};
+type RenderedEmbeddedSource = EmbeddedSource & {
+  rendered: string;
+};
 type MinimizedResult = {
   /**
    * code
@@ -219,6 +310,10 @@ type MinimizedResult = {
    * extracted comments
    */
   extractedComments?: string[] | undefined;
+  /**
+   * what the source embeds, when the minimizer was asked to collect it
+   */
+  embeddedSources?: EmbeddedSource[] | undefined;
 };
 type Input = {
   [file: string]: string;
@@ -254,6 +349,16 @@ type MinimizeFunctionHelpers = {
    */
   filter?:
     | ((name: string, info?: AssetInfo) => boolean | undefined)
+    | undefined;
+  /**
+   * the languages this minimizer minifies, e.g. `["css"]`. Source that carries no filename — what a module embeds in another language's output — is dispatched by this rather than by `test` / `filter`, and a minimizer that declares nothing is never handed any
+   */
+  getTypes?: (() => string[] | undefined) | undefined;
+  /**
+   * the languages this minimizer can hand out from inside what it minifies, through the `collectEmbeddedSource` / `embeddedSources` options. Empty (or absent) means it nests nothing a caller can reach, and the collecting pass is not run
+   */
+  getEmbeddedTypes?:
+    | ((minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined)
     | undefined;
 };
 type MinimizerImplementation<T> = T extends EXPECTED_ANY[]
@@ -321,6 +426,10 @@ type BasePluginOptions = {
    * parallel option
    */
   parallel?: Parallel | undefined;
+  /**
+   * minify source one language embeds in another (default: true)
+   */
+  minifyEmbedded?: boolean | undefined;
 };
 type DefinedDefaultMinimizerAndOptions<T> =
   T extends import("terser").MinifyOptions

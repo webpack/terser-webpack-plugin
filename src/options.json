@@ -173,6 +173,11 @@
         }
       ]
     },
+    "minifyEmbedded": {
+      "description": "Minify source one language embeds in another - CSS or HTML reaching the bundle inside a JavaScript string literal, an inline `<style>` or `<script>`, a `data:` payload.",
+      "link": "https://github.com/webpack/minimizer-webpack-plugin#minifyembedded",
+      "type": "boolean"
+    },
     "parallel": {
       "description": "Use multi-process parallel running to improve the build speed.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#parallel",

@@ -8,6 +8,20 @@ const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
 const IS_WINDOWS = process.platform === "win32";
 const RUN_CSS_TESTS = NODE_MAJOR >= 18 && !IS_WINDOWS;
 const RUN_SWC_HTML_TESTS = NODE_MAJOR >= 14;
+// `renderEmbeddedSource` and the `collectEmbeddedSource` / `embeddedSources`
+// passes landed in webpack 5.110; the plugin degrades to doing nothing without
+// them, so the file covering them is skipped on an older one. Asked of the
+// minify function that reads the passes rather than of the version string.
+// Deep paths, resolved at call time: they ship from webpack 5.110, and an older
+// one has no such file for a static import to resolve.
+const WEBPACK_CSS_MINIFY = "webpack/lib/css/cssMinify";
+const RUN_EMBEDDED_TESTS = (() => {
+  try {
+    return typeof require(WEBPACK_CSS_MINIFY).getEmbeddedTypes === "function";
+  } catch (_err) {
+    return false;
+  }
+})();
 
 const testPathIgnorePatterns = [];
 
@@ -17,6 +31,10 @@ if (!RUN_CSS_TESTS) {
 
 if (!RUN_SWC_HTML_TESTS) {
   testPathIgnorePatterns.push("/test/swc-html-minify-option\\.test\\.js$");
+}
+
+if (!RUN_EMBEDDED_TESTS) {
+  testPathIgnorePatterns.push("/test/minify-embedded-option\\.test\\.js$");
 }
 
 module.exports = {

@@ -3,6 +3,7 @@ const path = require("path");
 
 const { validate } = require("schema-utils");
 
+const { EmbeddedMinimizer } = require("./embedded");
 const { minify } = require("./minify");
 const schema = require("./options.json");
 const {
@@ -83,12 +84,43 @@ const {
  */
 
 /**
+ * What one embedded source is and where it is going, as
+ * `renderEmbeddedSource` describes it.
+ * @typedef {object} EmbeddedSourceInfo
+ * @property {string} type the embedded source's language, e.g. `"css"`
+ * @property {string} hostType the language of the output it is embedded in
+ * @property {import("webpack").Module} module the module being generated
+ */
+
+/**
+ * The two hooks webpack >= 5.110 adds. Declared here rather than read off
+ * `Compilation`: the plugin supports webpack `^5.1.0`, whose types have
+ * neither, and it does nothing at all where they are absent.
+ * @typedef {object} EmbeddedSourceHooks
+ * @property {{ tapPromise: (name: string, fn: (source: import("webpack").sources.Source, info: EmbeddedSourceInfo) => Promise<import("webpack").sources.Source>) => void }=} renderEmbeddedSource offers each embedded source before it is embedded
+ * @property {{ tap: (name: string, fn: (module: import("webpack").Module, hash: { update: (data: string) => void }) => void) => void }=} embeddedSourceHash hashes what a `renderEmbeddedSource` tap varies on
+ */
+
+/**
+ * One body written in another language that the minified source embeds — an
+ * inline `<style>` or `<script>`, an `<svg>` subtree, a `data:` payload.
+ * @typedef {object} EmbeddedSource
+ * @property {string} type the body's language, e.g. `"css"` / `"javascript"` / `"svg"`
+ * @property {string} source the body as it was written
+ */
+
+/**
+ * @typedef {EmbeddedSource & { rendered: string }} RenderedEmbeddedSource
+ */
+
+/**
  * @typedef {object} MinimizedResult
  * @property {string=} code code
  * @property {RawSourceMap=} map source map
  * @property {(Error | string)[]=} errors errors
  * @property {(Error | string)[]=} warnings warnings
  * @property {string[]=} extractedComments extracted comments
+ * @property {EmbeddedSource[]=} embeddedSources what the source embeds, when the minimizer was asked to collect it
  */
 
 /**
@@ -125,6 +157,8 @@ const {
  * @property {() => boolean | undefined=} supportsWorkerThreads true when minimizer support worker threads, otherwise false
  * @property {() => boolean | undefined=} supportsWorker true when minimizer support worker, otherwise false
  * @property {(name: string, info?: AssetInfo) => boolean | undefined=} filter return true when the minimizer supports the asset, otherwise false. When an array of minimizers is configured, each asset is dispatched only to the minimizers whose `filter` accepts it. Assets rejected by every minimizer in the array are skipped entirely.
+ * @property {() => string[] | undefined=} getTypes the languages this minimizer minifies, e.g. `["css"]`. Source that carries no filename — what a module embeds in another language's output — is dispatched by this rather than by `test` / `filter`, and a minimizer that declares nothing is never handed any
+ * @property {(minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined=} getEmbeddedTypes the languages this minimizer can hand out from inside what it minifies, through the `collectEmbeddedSource` / `embeddedSources` options. Empty (or absent) means it nests nothing a caller can reach, and the collecting pass is not run
  */
 
 /**
@@ -160,6 +194,7 @@ const {
  * @property {Rules=} exclude exclude rule
  * @property {ExtractCommentsOptions=} extractComments extract comments options
  * @property {Parallel=} parallel parallel option
+ * @property {boolean=} minifyEmbedded minify source one language embeds in another (default: true)
  */
 
 /**
@@ -199,6 +234,7 @@ class TerserPlugin {
       test = /\.[cm]?js(\?.*)?$/i,
       extractComments = true,
       parallel = true,
+      minifyEmbedded = true,
       include,
       exclude,
     } = options || {};
@@ -221,6 +257,7 @@ class TerserPlugin {
       test,
       extractComments,
       parallel,
+      minifyEmbedded,
       include,
       exclude,
       minimizer: {
@@ -540,6 +577,27 @@ class TerserPlugin {
     const { SourceMapSource, ConcatSource, RawSource } =
       compiler.webpack.sources;
 
+    /**
+     * @param {InternalOptions<T>} options what to minify
+     * @returns {Promise<MinimizedResult>} the result
+     */
+    const run = (options) =>
+      getWorker
+        ? getWorker().transform(getSerializeJavascript()(options))
+        : minify(options);
+    // Both passes an embedded-source minimizer takes are plain data, so an
+    // asset reaches what it nests inside itself without leaving the pool.
+    const embedded = new EmbeddedMinimizer({
+      implementations:
+        /** @type {(BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers)[]} */
+        (/** @type {unknown} */ (implementations)),
+      minimizerOptions: this.options.minimizer.options,
+      run,
+    });
+    const runMinify = this.options.minifyEmbedded
+      ? /** @type {typeof run} */ ((options) => embedded.minify(options))
+      : run;
+
     /** @typedef {{ extractedCommentsSource: import("webpack").sources.RawSource, commentsFilename: string }} ExtractedCommentsInfo */
     /** @type {Map<string, ExtractedCommentsInfo>} */
     const allExtractedComments = new Map();
@@ -617,9 +675,7 @@ class TerserPlugin {
           options.ecma = getEcmaVersion(compiler.options.output.environment);
 
           try {
-            output = await (getWorker
-              ? getWorker().transform(getSerializeJavascript()(options))
-              : minify(options));
+            output = await runMinify(options);
           } catch (error) {
             const hasSourceMap =
               inputSourceMap && TerserPlugin.isSourceMap(inputSourceMap);
@@ -908,6 +964,122 @@ class TerserPlugin {
   }
 
   /**
+   * Minify one source a module embeds in another language's output — CSS or
+   * HTML reaching the bundle inside a JavaScript string literal, an
+   * `asset/source` file's text, an `asset/inline` payload. No asset carries
+   * this text, so there is no filename to dispatch by: it goes to whichever
+   * minimizer declares `info.type` among the languages it minifies.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {EmbeddedMinimizer<T>} embedded the embedded-source dispatcher
+   * @param {import("webpack").sources.Source} source the embedded source
+   * @param {EmbeddedSourceInfo} info what it is and where it is going
+   * @returns {Promise<import("webpack").sources.Source>} the minified source, or the original
+   */
+  async renderEmbeddedSource(compiler, compilation, embedded, source, info) {
+    const { type, hostType, module } = info;
+    const matched = embedded.match(type);
+
+    if (matched.length === 0) {
+      return source;
+    }
+
+    const name = module.nameForCondition() || module.identifier();
+
+    const cache = compilation.getCache("TerserWebpackPlugin|embeddedSource");
+    const cacheItem = cache.getItemCache(
+      `${name}|${type}|${hostType}`,
+      cache.getLazyHashedEtag(source),
+    );
+    let output =
+      /** @type {{ source: import("webpack").sources.Source, errors?: (Error | string)[], warnings?: (Error | string)[] } | undefined} */
+      (await cacheItem.getPromise());
+
+    if (!output) {
+      const { source: sourceFromInputSource, map } = source.sourceAndMap();
+      const input = Buffer.isBuffer(sourceFromInputSource)
+        ? sourceFromInputSource.toString()
+        : sourceFromInputSource;
+      const inputSourceMap =
+        map && TerserPlugin.isSourceMap(map)
+          ? /** @type {RawSourceMap} */ (map)
+          : undefined;
+
+      /** @type {MinimizedResult} */
+      let result;
+
+      try {
+        result = await embedded.minify({
+          name,
+          input,
+          inputSourceMap,
+          // There is no asset to hang a banner on, and no filename to point it
+          // at, so comments stay where the minimizer's own defaults keep them.
+          extractComments: false,
+          minimizer: embedded.minimizerFor(matched),
+          ecma: getEcmaVersion(
+            /** @type {NonNullable<NonNullable<import("webpack").Configuration["output"]>["environment"]>} */
+            (compiler.options.output.environment),
+          ),
+        });
+      } catch (error) {
+        compilation.errors.push(
+          TerserPlugin.buildError(
+            /** @type {Error | ErrorObject | string} */ (error),
+            name,
+          ),
+        );
+
+        return source;
+      }
+
+      const { RawSource, SourceMapSource } = compiler.webpack.sources;
+      // A map is asked for only when the input carried one: the generator
+      // embedding this inlines a new one as a data URI, which costs more than
+      // minifying saves.
+      const minified =
+        typeof result.code === "string"
+          ? inputSourceMap && result.map
+            ? new SourceMapSource(
+                result.code,
+                name,
+                /** @type {RawSourceMap} */ (result.map),
+                /** @type {string} */ (input),
+                inputSourceMap,
+                true,
+              )
+            : new RawSource(result.code)
+          : source;
+
+      output = {
+        source: minified,
+        errors: (result.errors || []).map((item) =>
+          TerserPlugin.buildError(
+            /** @type {Error | ErrorObject | string} */ (item),
+            name,
+          ),
+        ),
+        warnings: (result.warnings || []).map((item) =>
+          TerserPlugin.buildWarning(item, name),
+        ),
+      };
+
+      await cacheItem.storePromise(output);
+    }
+
+    for (const error of /** @type {Error[]} */ (output.errors || [])) {
+      compilation.errors.push(error);
+    }
+
+    for (const warning of /** @type {Error[]} */ (output.warnings || [])) {
+      compilation.warnings.push(warning);
+    }
+
+    return output.source;
+  }
+
+  /**
    * @param {Compiler} compiler compiler
    * @returns {void}
    */
@@ -944,6 +1116,52 @@ class TerserPlugin {
         hash.update("TerserPlugin");
         hash.update(data);
       });
+
+      // Added in webpack 5.110: source one language embeds in another, which no
+      // asset carries and `processAssets` therefore never sees.
+      const embeddedHooks =
+        /** @type {EmbeddedSourceHooks} */
+        (/** @type {unknown} */ (compilation.hooks));
+
+      if (
+        this.options.minifyEmbedded &&
+        embeddedHooks.renderEmbeddedSource &&
+        embeddedHooks.embeddedSourceHash
+      ) {
+        // Code generation runs before the worker pool is up, so these run here.
+        const embedded = new EmbeddedMinimizer({
+          implementations:
+            /** @type {(BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers)[]} */
+            (
+              /** @type {unknown} */
+              (
+                Array.isArray(this.options.minimizer.implementation)
+                  ? this.options.minimizer.implementation
+                  : [this.options.minimizer.implementation]
+              )
+            ),
+          minimizerOptions: this.options.minimizer.options,
+          run: minify,
+        });
+
+        embeddedHooks.renderEmbeddedSource.tapPromise(
+          pluginName,
+          (source, info) =>
+            this.renderEmbeddedSource(
+              compiler,
+              compilation,
+              embedded,
+              source,
+              info,
+            ),
+        );
+        // Module hashes are taken before code generation, so what this tap
+        // varies on cannot reach the code generation cache key on its own.
+        embeddedHooks.embeddedSourceHash.tap(pluginName, (module, hash) => {
+          hash.update("TerserPlugin");
+          hash.update(data);
+        });
+      }
 
       compilation.hooks.processAssets.tapPromise(
         {

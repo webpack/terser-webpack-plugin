@@ -318,6 +318,8 @@ async function minify(options) {
   const errors = [];
   /** @type {string[]} */
   const extractedComments = [];
+  /** @type {import("./index.js").EmbeddedSource[]} */
+  const embeddedSources = [];
 
   for (let i = 0; i < implementations.length; i++) {
     const currentImplementation =
@@ -362,6 +364,10 @@ async function minify(options) {
       extractedComments.push(...result.extractedComments);
     }
 
+    if (result.embeddedSources && result.embeddedSources.length > 0) {
+      embeddedSources.push(...result.embeddedSources);
+    }
+
     if (typeof result.code === "string") {
       lastCode = result.code;
       // The minimizer's output map is `name → step-output`. Chain it with
@@ -371,13 +377,22 @@ async function minify(options) {
     }
   }
 
-  return {
+  /** @type {MinimizedResult} */
+  const result = {
     code: lastCode,
     map: lastMap,
     warnings,
     errors,
     extractedComments,
   };
+
+  // Only when something was collected, so a minimizer that does not read the
+  // embedded-source passes returns exactly what it always has.
+  if (embeddedSources.length > 0) {
+    result.embeddedSources = embeddedSources;
+  }
+
+  return result;
 }
 
 /**

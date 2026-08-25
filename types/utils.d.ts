@@ -34,6 +34,12 @@ export namespace cleanCssMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -60,6 +66,12 @@ export namespace cssnanoMinify {
    * @returns {boolean | undefined} true if worker threads are supported
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
@@ -88,6 +100,12 @@ export namespace cssoMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -113,6 +131,12 @@ export namespace esbuildMinify {
    * @returns {boolean | undefined} true if worker thread is supported, false otherwise
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
@@ -140,6 +164,12 @@ export namespace esbuildMinifyCss {
    * @returns {boolean | undefined} false because `esbuild` is a native binding
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
@@ -180,6 +210,12 @@ export namespace htmlMinifierTerser {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
    */
@@ -200,6 +236,12 @@ export namespace jsonMinify {
   function getMinimizerVersion(): string;
   function supportsWorker(): boolean;
   function supportsWorkerThreads(): boolean;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JSON file
@@ -227,6 +269,12 @@ export namespace lightningCssMinify {
    * @returns {boolean | undefined} false because `lightningcss` is a native binding
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
@@ -265,6 +313,12 @@ export namespace minifyHtmlNode {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
    */
@@ -293,6 +347,12 @@ export namespace swcMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
    */
@@ -320,6 +380,12 @@ export namespace swcMinifyCss {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -346,6 +412,12 @@ export namespace swcMinifyHtml {
    * @returns {boolean | undefined} false because `@swc/html` is a native binding
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
@@ -377,6 +449,12 @@ export namespace swcMinifyHtmlFragment {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
    */
@@ -404,6 +482,12 @@ export namespace terserMinify {
    * @returns {boolean | undefined} true if worker thread is supported, false otherwise
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
@@ -444,6 +528,12 @@ export namespace uglifyJsMinify {
    * @returns {boolean | undefined} true if worker thread is supported, false otherwise
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
