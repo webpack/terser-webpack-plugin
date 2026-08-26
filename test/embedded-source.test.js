@@ -142,7 +142,7 @@ reportingMinify.supportsWorker = () => false;
 reportingMinify.supportsWorkerThreads = () => false;
 reportingMinify.filter = (name) => /\.css(\?.*)?$/i.test(name);
 
-describe("minifyEmbedded option", () => {
+describe("embedded source", () => {
   it("minifies CSS a module embeds in a JavaScript string literal", async () => {
     const compiler = getCompiler({
       entry: fixture("entry-css.js"),
@@ -271,26 +271,6 @@ describe("minifyEmbedded option", () => {
     expect(exported(compiler, stats).icon).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg"   viewBox="0 0 10 10">\n\t<rect  width="10"   height="10"  />\n</svg>\n',
     );
-  });
-
-  it("leaves embedded source alone when `minifyEmbedded` is false", async () => {
-    const compiler = getCompiler({
-      entry: fixture("entry-css.js"),
-      target: "node",
-      experiments: { css: true },
-      module: {
-        rules: [
-          { test: /\.css$/, type: "css/auto", parser: { exportType: "text" } },
-        ],
-      },
-    });
-
-    defaultPlugin({ minifyEmbedded: false }).apply(compiler);
-
-    const stats = await compile(compiler);
-
-    expect(getErrors(stats)).toEqual([]);
-    expect(exported(compiler, stats)).toMatch(/\.empty \{/);
   });
 
   it("dispatches by the language a minimizer declares, not by `test`", async () => {

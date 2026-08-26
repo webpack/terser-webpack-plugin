@@ -171,33 +171,4 @@ describe("embedded sources", () => {
       "<script>  var  a  =  1  </script>",
     );
   });
-
-  it("leaves everything alone when `minifyEmbedded` is false", async () => {
-    const compiler = getCompiler({
-      entry: path.resolve(__dirname, "./fixtures/embedded/entry-page.js"),
-      target: "node",
-      output: {
-        path: path.resolve(__dirname, "helpers/dist"),
-        filename: "[name].js",
-        assetModuleFilename: "[name][ext]",
-      },
-      module: { rules: [{ test: /\.page$/, type: "asset/resource" }] },
-    });
-
-    new MinimizerPlugin({
-      test: /\.page$/i,
-      minify: [pageMinify, fakeCssMinify],
-      minimizerOptions: [{}, {}],
-      minifyEmbedded: false,
-      parallel: false,
-    }).apply(compiler);
-
-    const stats = await compile(compiler);
-
-    expect(getErrors(stats)).toEqual([]);
-    expect(asked).toEqual(["emit"]);
-    expect(readAsset("host.page", compiler, stats)).toContain(
-      "<style>  .a { COLOR : RED }  </style>",
-    );
-  });
 });

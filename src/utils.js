@@ -13,33 +13,6 @@
  */
 
 /**
- * The languages a minimizer says it minifies, through the `getTypes` ability it
- * declares. One that says nothing takes no embedded source: such source carries
- * no filename to guess from, and guessing is what the ability replaces.
- * @param {EXPECTED_ANY} implementation minimizer
- * @returns {string[]} the languages
- */
-function getMinimizerTypes(implementation) {
-  return typeof implementation.getTypes === "function"
-    ? implementation.getTypes() || []
-    : [];
-}
-
-/**
- * The languages a minimizer says it can hand out from inside what it minifies,
- * through the `collectEmbeddedSource` / `embeddedSources` passes. Empty for one
- * that does not read them, and for one whose options turn them off.
- * @param {EXPECTED_ANY} implementation minimizer
- * @param {EXPECTED_OBJECT} minimizerOptions the options it will run with
- * @returns {string[]} the languages
- */
-function getMinimizerEmbeddedTypes(implementation, minimizerOptions) {
-  return typeof implementation.getEmbeddedTypes === "function"
-    ? implementation.getEmbeddedTypes(minimizerOptions) || []
-    : [];
-}
-
-/**
  * The options entry belonging to one minimizer: an array is parallel to the
  * implementations, a single object is shared by all of them.
  * @param {EXPECTED_ANY} minimizerOptions the options as configured
@@ -2054,9 +2027,7 @@ module.exports = {
   esbuildMinify,
   esbuildMinifyCss,
   getEcmaVersion,
-  getMinimizerEmbeddedTypes,
   getMinimizerOptionsAt,
-  getMinimizerTypes,
   htmlMinifierTerser,
   jsonMinify,
   lightningCssMinify,

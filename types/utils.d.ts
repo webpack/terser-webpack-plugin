@@ -189,29 +189,6 @@ export function getEcmaVersion(
     NonNullable<import("webpack").Configuration["output"]>["environment"]
   >,
 ): number;
-/**
- * The languages a minimizer says it can hand out from inside what it minifies,
- * through the `collectEmbeddedSource` / `embeddedSources` passes. Empty for one
- * that does not read them, and for one whose options turn them off.
- * @param {EXPECTED_ANY} implementation minimizer
- * @param {EXPECTED_OBJECT} minimizerOptions the options it will run with
- * @returns {string[]} the languages
- */
-export function getMinimizerEmbeddedTypes(
-  implementation: EXPECTED_ANY,
-  minimizerOptions: EXPECTED_OBJECT,
-): string[];
-/**
- * The options entry belonging to one minimizer: an array is parallel to the
- * implementations, a single object is shared by all of them.
- * @param {EXPECTED_ANY} minimizerOptions the options as configured
- * @param {number} index index into the implementations
- * @returns {EXPECTED_OBJECT} its options
- */
-export function getMinimizerOptionsAt(
-  minimizerOptions: EXPECTED_ANY,
-  index: number,
-): EXPECTED_OBJECT;
 /** @typedef {import("./index.js").ExtractCommentsOptions} ExtractCommentsOptions */
 /** @typedef {import("./index.js").ExtractCommentsFunction} ExtractCommentsFunction */
 /** @typedef {import("./index.js").ExtractCommentsCondition} ExtractCommentsCondition */
@@ -225,13 +202,16 @@ export function getMinimizerOptionsAt(
  * @typedef {string[]} ExtractedComments
  */
 /**
- * The languages a minimizer says it minifies, through the `getTypes` ability it
- * declares. One that says nothing takes no embedded source: such source carries
- * no filename to guess from, and guessing is what the ability replaces.
- * @param {EXPECTED_ANY} implementation minimizer
- * @returns {string[]} the languages
+ * The options entry belonging to one minimizer: an array is parallel to the
+ * implementations, a single object is shared by all of them.
+ * @param {EXPECTED_ANY} minimizerOptions the options as configured
+ * @param {number} index index into the implementations
+ * @returns {EXPECTED_OBJECT} its options
  */
-export function getMinimizerTypes(implementation: EXPECTED_ANY): string[];
+export function getMinimizerOptionsAt(
+  minimizerOptions: EXPECTED_ANY,
+  index: number,
+): EXPECTED_OBJECT;
 /**
  * Minify HTML using `html-minifier-terser`.
  * @param {Input} input input

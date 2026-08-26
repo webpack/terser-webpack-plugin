@@ -213,7 +213,7 @@ exports[`validation validate 16`] = `
 exports[`validation validate 17`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
  - options has an unknown property 'unknown'. These properties are valid:
-   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, minifyEmbedded?, parallel?, minify? }"
+   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, minify? }"
 `;
 
 exports[`validation validate 18`] = `

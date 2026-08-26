@@ -12,9 +12,7 @@ const {
   esbuildMinify,
   esbuildMinifyCss,
   getEcmaVersion,
-  getMinimizerEmbeddedTypes,
   getMinimizerOptionsAt,
-  getMinimizerTypes,
   htmlMinifierTerser,
   jsonMinify,
   lightningCssMinify,
@@ -197,7 +195,6 @@ const {
  * @property {Rules=} exclude exclude rule
  * @property {ExtractCommentsOptions=} extractComments extract comments options
  * @property {Parallel=} parallel parallel option
- * @property {boolean=} minifyEmbedded minify source one language embeds in another (default: true)
  */
 
 /**
@@ -237,7 +234,6 @@ class TerserPlugin {
       test = /\.[cm]?js(\?.*)?$/i,
       extractComments = true,
       parallel = true,
-      minifyEmbedded = true,
       include,
       exclude,
     } = options || {};
@@ -260,7 +256,6 @@ class TerserPlugin {
       test,
       extractComments,
       parallel,
-      minifyEmbedded,
       include,
       exclude,
       minimizer: {
@@ -590,11 +585,8 @@ class TerserPlugin {
         : minify(options);
     // Both passes an embedded-source minimizer takes are plain data, so an
     // asset reaches what it nests inside itself without leaving the pool.
-    const runMinify = this.options.minifyEmbedded
-      ? /** @type {typeof run} */ (
-          (options) => this.minifyEmbedded(options, run)
-        )
-      : run;
+    /** @type {typeof run} */
+    const runMinify = (options) => this.minifyEmbedded(options, run);
 
     /** @typedef {{ extractedCommentsSource: import("webpack").sources.RawSource, commentsFilename: string }} ExtractedCommentsInfo */
     /** @type {Map<string, ExtractedCommentsInfo>} */
@@ -988,8 +980,13 @@ class TerserPlugin {
     const minimizers = this.minimizers();
     const matched = [];
 
+    // A minimizer that declares nothing takes no embedded source: such source
+    // carries no filename to guess from, and guessing is what `getTypes`
+    // replaces.
     for (let i = 0; i < minimizers.length; i++) {
-      if (getMinimizerTypes(minimizers[i]).includes(type)) {
+      const { getTypes } = minimizers[i];
+
+      if (typeof getTypes === "function" && (getTypes() || []).includes(type)) {
         matched.push(i);
       }
     }
@@ -1021,34 +1018,6 @@ class TerserPlugin {
   }
 
   /**
-   * Whether this run could both be offered a nested language and do something
-   * with it. False means the collecting pass would only ever be told about
-   * bodies nothing here minifies, so it is not worth running.
-   * @private
-   * @param {InternalOptions<T>} options what to minify
-   * @returns {boolean} true when some nested language is reachable
-   */
-  reachesEmbedded(options) {
-    const { implementation } = options.minimizer;
-    const implementations = Array.isArray(implementation)
-      ? implementation
-      : [implementation];
-
-    for (let i = 0; i < implementations.length; i++) {
-      for (const type of getMinimizerEmbeddedTypes(
-        implementations[i],
-        getMinimizerOptionsAt(options.minimizer.options, i),
-      )) {
-        if (this.minimizersForType(type).length > 0) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
    * Minify one input, reaching whatever it embeds first — but only where some
    * configured minimizer claims a language this input could offer. Otherwise
    * the collecting pass would run for bodies nothing here can minify, so it is
@@ -1064,7 +1033,30 @@ class TerserPlugin {
    * @returns {Promise<MinimizedResult>} the result
    */
   async minifyEmbedded(options, run) {
-    if (!this.reachesEmbedded(options)) {
+    const { implementation } = options.minimizer;
+    const implementations =
+      /** @type {(BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers)[]} */
+      (
+        /** @type {unknown} */
+        (Array.isArray(implementation) ? implementation : [implementation])
+      );
+    let reachable = false;
+
+    // Both declarations have to meet: a language one of these can hand out, and
+    // a configured minimizer that claims it.
+    for (let i = 0; i < implementations.length && !reachable; i++) {
+      const { getEmbeddedTypes } = implementations[i];
+
+      reachable =
+        typeof getEmbeddedTypes === "function" &&
+        (
+          getEmbeddedTypes(
+            getMinimizerOptionsAt(options.minimizer.options, i),
+          ) || []
+        ).some((type) => this.minimizersForType(type).length > 0);
+    }
+
+    if (!reachable) {
       return run(options);
     }
 
@@ -1078,48 +1070,14 @@ class TerserPlugin {
       return collected;
     }
 
-    const { embeddedSources, errors, warnings } = await this.renderNested(
-      options.name,
-      collected.embeddedSources,
-      run,
-    );
-    // Everything nested was declined, so the collecting pass already emitted
-    // what a second one would.
-    const result =
-      embeddedSources.length === 0
-        ? collected
-        : await run(withEmbeddedOverlay(options, { embeddedSources }));
-
-    // What went wrong inside belongs to what embeds it: there is no asset of
-    // its own for it to be reported against.
-    if (errors.length === 0 && warnings.length === 0) {
-      return result;
-    }
-
-    return {
-      ...result,
-      errors: [...(result.errors || []), ...errors],
-      warnings: [...(result.warnings || []), ...warnings],
-    };
-  }
-
-  /**
-   * Minify every nested body a minimizer claims the language of. A body no
-   * minimizer claims is left out rather than handed back unchanged, so the
-   * minifier that emits falls back to whatever built-in it has for it.
-   * @private
-   * @param {string} host name of what embeds them
-   * @param {EmbeddedSource[]} sources the nested bodies
-   * @param {(options: InternalOptions<T>) => Promise<MinimizedResult>} run runs one minification
-   * @returns {Promise<{ embeddedSources: RenderedEmbeddedSource[], errors: (Error | string)[], warnings: (Error | string)[] }>} what each was minified to, and what was reported over them
-   */
-  async renderNested(host, sources, run) {
     /** @type {(Error | string)[]} */
     const errors = [];
     /** @type {(Error | string)[]} */
     const warnings = [];
+    // A body no minimizer claims is left out rather than handed back unchanged,
+    // so the minifier that emits falls back to whatever built-in it has for it.
     const rendered = await Promise.all(
-      sources.map(async ({ type, source }) => {
+      collected.embeddedSources.map(async ({ type, source }) => {
         const matched = this.minimizersForType(type);
 
         if (matched.length === 0) {
@@ -1128,7 +1086,7 @@ class TerserPlugin {
 
         const result = await this.minifyEmbedded(
           {
-            name: host,
+            name: options.name,
             input: source,
             inputSourceMap: undefined,
             extractComments: false,
@@ -1157,13 +1115,26 @@ class TerserPlugin {
         return { type, source, rendered: result.code };
       }),
     );
+    const embeddedSources =
+      /** @type {RenderedEmbeddedSource[]} */
+      (rendered.filter((entry) => typeof entry !== "undefined"));
+    // Everything nested was declined, so the collecting pass already emitted
+    // what a second one would.
+    const result =
+      embeddedSources.length === 0
+        ? collected
+        : await run(withEmbeddedOverlay(options, { embeddedSources }));
+
+    // What went wrong inside belongs to what embeds it: there is no asset of
+    // its own for it to be reported against.
+    if (errors.length === 0 && warnings.length === 0) {
+      return result;
+    }
 
     return {
-      embeddedSources:
-        /** @type {RenderedEmbeddedSource[]} */
-        (rendered.filter((entry) => typeof entry !== "undefined")),
-      errors,
-      warnings,
+      ...result,
+      errors: [...(result.errors || []), ...errors],
+      warnings: [...(result.warnings || []), ...warnings],
     };
   }
 
@@ -1339,7 +1310,6 @@ class TerserPlugin {
         (/** @type {unknown} */ (compilation.hooks));
 
       if (
-        this.options.minifyEmbedded &&
         embeddedHooks.renderEmbeddedSource &&
         embeddedHooks.embeddedSourceHash
       ) {

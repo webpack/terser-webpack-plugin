@@ -34,7 +34,7 @@ if (!RUN_SWC_HTML_TESTS) {
 }
 
 if (!RUN_EMBEDDED_TESTS) {
-  testPathIgnorePatterns.push("/test/minify-embedded-option\\.test\\.js$");
+  testPathIgnorePatterns.push("/test/embedded-source\\.test\\.js$");
 }
 
 module.exports = {
