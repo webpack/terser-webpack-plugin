@@ -2,13 +2,55 @@ import path from "path";
 
 import MinimizerPlugin from "../src";
 
-import { compile, getCompiler, getErrors, readAsset } from "./helpers";
+import {
+  compile,
+  getCompiler,
+  getErrors,
+  getWarnings,
+  readAsset,
+} from "./helpers";
 
-// The `collectEmbeddedSource` / `embeddedSources` protocol on its own: a
-// minimizer says what it nests, each body goes to whichever minimizer claims
-// its language, and the answers come back for the pass that emits. Driven by
+// The `renderEmbeddedSource` dispatch on its own: a minimizer hands out what it
+// nests, each body goes to whichever minimizer claims its language, and the
+// answer comes back for the same print. Driven by
 // minify functions written here rather than webpack's, so it holds on every
 // webpack the plugin supports — including ones with no embedded-source hook.
+
+// A renderer may answer with the text alone or with a whole result — what it
+// minified plus anything it has to report. webpack's own minifiers unwrap it
+// this way, so these stand-ins do too.
+const answerText = (answer) =>
+  answer === undefined || typeof answer === "string" ? answer : answer.code;
+
+// Anything the renderer throws is reported rather than dropped, and the body is
+// spelled as an untapped run spells it — which is what webpack's minifiers do.
+const askRenderer = async (render, source, type) => {
+  try {
+    return await render(source, { type });
+  } catch (error) {
+    return { errors: [error] };
+  }
+};
+
+// And what it reported travels back with the asset that embeds the body: there
+// is no asset of its own for it to be reported against.
+const answerDiagnostics = (answers) => {
+  const warnings = [];
+  const errors = [];
+
+  for (const answer of answers) {
+    if (answer === undefined || typeof answer === "string") continue;
+    if (answer.warnings) warnings.push(...answer.warnings);
+    if (answer.errors) errors.push(...answer.errors);
+  }
+
+  const out = {};
+
+  if (warnings.length !== 0) out.warnings = warnings;
+  if (errors.length !== 0) out.errors = errors;
+
+  return out;
+};
 
 // Built per call: a `g` regexp carries `lastIndex` between uses, and this file
 // runs on every Node the plugin supports — including ones without `matchAll`.
@@ -19,45 +61,55 @@ const LANGUAGE_BY_TAG = { script: "javascript", style: "css", svg: "svg" };
 let asked;
 
 /**
- * A document minifier: reports the bodies it nests when asked to collect, and
- * writes back whatever answers it is given.
+ * A document minifier: hands each body it nests to the caller's renderer and
+ * writes back whatever comes of it.
  * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
  * @param {undefined} sourceMap unused
- * @param {{ collectEmbeddedSource?: boolean, embeddedSources?: { type: string, source: string, rendered: string }[] }} minimizerOptions minimizer options
- * @returns {EXPECTED_ANY} the document, and what it nests when asked to collect
+ * @param {{ renderEmbeddedSource?: (source: string, info: { type: string }) => Promise<string | undefined> }} minimizerOptions minimizer options
+ * @returns {Promise<{ code: string }>} the document
  */
-function pageMinify(input, sourceMap, minimizerOptions) {
+async function pageMinify(input, sourceMap, minimizerOptions) {
   const [[, code]] = Object.entries(input);
+  const { renderEmbeddedSource } = minimizerOptions;
 
-  asked.push(minimizerOptions.collectEmbeddedSource ? "collect" : "emit");
+  asked.push(renderEmbeddedSource ? "render" : "plain");
 
-  if (minimizerOptions.collectEmbeddedSource) {
-    const embeddedSources = [];
-    const re = bodyRe();
-    let match = re.exec(code);
+  if (!renderEmbeddedSource) return { code };
 
-    while (match !== null) {
-      embeddedSources.push({
-        type: LANGUAGE_BY_TAG[/** @type {"script"} */ (match[1])],
-        source: match[2],
-      });
-      match = re.exec(code);
-    }
+  // Collected first so every body is rendered at once, exactly as webpack's own
+  // minifiers defer them: one parse, the answers put in afterwards.
+  const bodies = [];
+  const re = bodyRe();
+  let match = re.exec(code);
 
-    return { code, embeddedSources };
+  while (match !== null) {
+    bodies.push({
+      type: LANGUAGE_BY_TAG[/** @type {"script"} */ (match[1])],
+      source: match[2],
+    });
+    match = re.exec(code);
   }
 
-  const answers = new Map(
-    (minimizerOptions.embeddedSources || []).map((entry) => [
-      entry.source,
-      entry.rendered,
-    ]),
+  const rendered = await Promise.all(
+    bodies.map(({ source, type }) =>
+      askRenderer(renderEmbeddedSource, source, type),
+    ),
   );
+  const answers = new Map();
+
+  for (let i = 0; i < bodies.length; i++) {
+    const text = answerText(rendered[i]);
+
+    if (typeof text === "string") {
+      answers.set(bodies[i].source, text);
+    }
+  }
 
   return {
     code: code.replace(bodyRe(), (whole, tag, body) =>
       answers.has(body) ? `<${tag}>${answers.get(body)}</${tag}>` : whole,
     ),
+    ...answerDiagnostics(rendered),
   };
 }
 
@@ -66,6 +118,47 @@ pageMinify.getEmbeddedTypes = () => ["css", "javascript"];
 pageMinify.supportsWorker = () => false;
 pageMinify.supportsWorkerThreads = () => false;
 pageMinify.filter = (name) => /\.page$/i.test(name);
+
+/** @type {EXPECTED_ANY[]} */
+let handed;
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {EXPECTED_ANY} minimizerOptions the options it was handed
+ * @returns {{ code: string }} the body, minified
+ */
+function recordingCssMinify(input, sourceMap, minimizerOptions) {
+  const { renderEmbeddedSource, ...rest } = minimizerOptions || {};
+
+  handed.push(["css", rest]);
+
+  return { code: Object.values(input)[0].replace(/\s+/g, "") };
+}
+
+recordingCssMinify.getTypes = () => ["css"];
+recordingCssMinify.supportsWorker = () => false;
+recordingCssMinify.supportsWorkerThreads = () => false;
+recordingCssMinify.filter = () => false;
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {EXPECTED_ANY} minimizerOptions the options it was handed
+ * @returns {{ code: string }} the body, minified
+ */
+function recordingJsMinify(input, sourceMap, minimizerOptions) {
+  const { renderEmbeddedSource, ...rest } = minimizerOptions || {};
+
+  handed.push(["javascript", rest]);
+
+  return { code: Object.values(input)[0].replace(/\s+/g, " ").trim() };
+}
+
+recordingJsMinify.getTypes = () => ["javascript"];
+recordingJsMinify.supportsWorker = () => false;
+recordingJsMinify.supportsWorkerThreads = () => false;
+recordingJsMinify.filter = () => false;
 
 /**
  * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
@@ -83,6 +176,33 @@ fakeCssMinify.supportsWorkerThreads = () => false;
 // Claims no asset at all: a minimizer can be configured for embedded source
 // alone, since `filter` answers for assets and `getTypes` for languages.
 fakeCssMinify.filter = () => false;
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @returns {{ code: string, warnings: string[] }} the body, with something to say about it
+ */
+function noisyJsMinify(input) {
+  const [[, code]] = Object.entries(input);
+
+  return { code: code.trim(), warnings: ["watch out"] };
+}
+
+noisyJsMinify.getTypes = () => ["javascript"];
+noisyJsMinify.supportsWorker = () => false;
+noisyJsMinify.supportsWorkerThreads = () => false;
+noisyJsMinify.filter = () => false;
+
+/**
+ * @returns {never} never returns
+ */
+function throwingJsMinify() {
+  throw new Error("blew up");
+}
+
+throwingJsMinify.getTypes = () => ["javascript"];
+throwingJsMinify.supportsWorker = () => false;
+throwingJsMinify.supportsWorkerThreads = () => false;
+throwingJsMinify.filter = () => false;
 
 /**
  * @returns {{ code: undefined, errors: Error[] }} a failure, reported rather than thrown
@@ -132,11 +252,49 @@ describe("embedded sources", () => {
     const stats = await compile(compiler);
 
     expect(getErrors(stats)).toEqual([]);
-    // Collected first, then emitted with the answer written back.
-    expect(asked).toEqual(["collect", "emit"]);
+    // One call, with the renderer handed in.
+    expect(asked).toEqual(["render"]);
     expect(readAsset("host.page", compiler, stats)).toContain(
       "<style>.a{color:red}</style>",
     );
+  });
+
+  it("hands each nested minimizer its own options, and the target's ecma", async () => {
+    handed = [];
+
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/embedded/entry-page.js"),
+      target: "node",
+      output: {
+        path: path.resolve(__dirname, "helpers/dist"),
+        filename: "[name].js",
+        assetModuleFilename: "[name][ext]",
+      },
+      module: { rules: [{ test: /\.page$/, type: "asset/resource" }] },
+    });
+
+    new MinimizerPlugin({
+      test: /\.page$/i,
+      minify: [pageMinify, recordingCssMinify, recordingJsMinify],
+      minimizerOptions: [
+        {},
+        { cssLevel: 2, dropComments: true },
+        { jsPasses: 3 },
+      ],
+      parallel: false,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    // Each is handed what was configured for it — without that there is no way
+    // to minify a nested body harder, or to turn one of its transforms off.
+    expect(handed).toEqual([
+      ["css", { cssLevel: 2, dropComments: true, ecma: expect.any(Number) }],
+      ["javascript", { jsPasses: 3, ecma: expect.any(Number) }],
+    ]);
+    // What the target can read is the target's, so it reaches the body too.
+    expect(handed[0][1].ecma).toBe(handed[1][1].ecma);
   });
 
   it("keeps a body whose language nothing claims exactly as written", async () => {
@@ -155,9 +313,35 @@ describe("embedded sources", () => {
     const stats = await compile(compiler);
 
     expect(getErrors(stats)).toEqual([]);
-    // One plain minification: nothing claims css or javascript, so the extra
-    // pass would only ever be told about bodies with nowhere to go.
-    expect(asked).toEqual(["emit"]);
+    // No renderer handed in: nothing claims css or javascript, so offering a
+    // body would only ever reach one with nowhere to go.
+    expect(asked).toEqual(["plain"]);
+  });
+
+  it("reports what a nested minimizer had to say about a body", async () => {
+    const compiler = getPageCompiler([pageMinify, noisyJsMinify]);
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toHaveLength(1);
+    expect(getWarnings(stats)[0]).toMatch(/watch out/);
+    // A warning is not a failure: the body is still written back minified.
+    expect(readAsset("host.page", compiler, stats)).toContain(
+      "<script>var  a  =  1</script>",
+    );
+  });
+
+  it("reports a nested minimizer that threw, and keeps the body", async () => {
+    const compiler = getPageCompiler([pageMinify, throwingJsMinify]);
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(/blew up/);
+    // Read off the compilation rather than the output: an errored build emits
+    // nothing, but the body it threw over is still spelled as it was written.
+    expect(stats.compilation.getAsset("host.page").source.source()).toContain(
+      "<script>  var  a  =  1  </script>",
+    );
   });
 
   it("reports a nested failure against the document that holds it", async () => {
@@ -182,34 +366,36 @@ const collapse = (text) => text.replace(/\s+/g, "");
 /**
  * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
  * @param {undefined} sourceMap unused
- * @param {{ collectEmbeddedSource?: boolean, embeddedSources?: { type: string, source: string, rendered: string }[] }} minimizerOptions minimizer options
- * @returns {EXPECTED_ANY} the sheet, and what it nests when asked to collect
+ * @param {{ renderEmbeddedSource?: (source: string, info: { type: string }) => Promise<string | undefined> }} minimizerOptions minimizer options
+ * @returns {Promise<{ code: string }>} the sheet
  */
-function selfNestingCssMinify(input, sourceMap, minimizerOptions) {
+async function selfNestingCssMinify(input, sourceMap, minimizerOptions) {
   const [[, code]] = Object.entries(input);
+  const { renderEmbeddedSource } = minimizerOptions;
 
-  asked.push(minimizerOptions.collectEmbeddedSource ? "collect" : "emit");
+  asked.push(renderEmbeddedSource ? "render" : "plain");
 
-  if (minimizerOptions.collectEmbeddedSource) {
-    const embeddedSources = [];
-    const re = nestedRe();
-    let match = re.exec(code);
+  if (!renderEmbeddedSource) return { code: collapse(code) };
 
-    while (match !== null) {
-      embeddedSources.push({ type: "css", source: match[1] });
-      match = re.exec(code);
-    }
+  const bodies = [];
+  const re = nestedRe();
+  let match = re.exec(code);
 
-    // What the collecting pass emits is what an untapped run emits.
-    return { code: collapse(code), embeddedSources };
+  while (match !== null) {
+    bodies.push(match[1]);
+    match = re.exec(code);
   }
 
-  const answers = new Map(
-    (minimizerOptions.embeddedSources || []).map((entry) => [
-      entry.source,
-      entry.rendered,
-    ]),
+  const rendered = await Promise.all(
+    bodies.map((source) => askRenderer(renderEmbeddedSource, source, "css")),
   );
+  const answers = new Map();
+
+  for (let i = 0; i < bodies.length; i++) {
+    const text = answerText(rendered[i]);
+
+    if (typeof text === "string") answers.set(bodies[i], text);
+  }
 
   return {
     code: collapse(
@@ -217,6 +403,7 @@ function selfNestingCssMinify(input, sourceMap, minimizerOptions) {
         answers.has(body) ? `<<${answers.get(body)}>>` : whole,
       ),
     ),
+    ...answerDiagnostics(rendered),
   };
 }
 
@@ -270,9 +457,9 @@ describe("embedded dispatch shapes", () => {
     const stats = await compile(compiler);
 
     expect(getErrors(stats)).toEqual([]);
-    // The nested body is dispatched back to the same minimizer, which collects
-    // over it in turn and finds nothing further.
-    expect(asked).toEqual(["collect", "collect", "emit"]);
+    // The nested body is dispatched back to the same minimizer, which is handed
+    // a renderer of its own and finds nothing further to offer.
+    expect(asked).toEqual(["render", "render"]);
     expect(readAsset("nesting.page", compiler, stats)).toContain("<<.b{}>>");
   });
 

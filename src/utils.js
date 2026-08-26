@@ -25,43 +25,6 @@ function getMinimizerOptionsAt(minimizerOptions, index) {
     : minimizerOptions;
 }
 
-/**
- * The options for one minification, with `overlay` merged into the entry of
- * every minimizer that reads the embedded-source passes.
- * @template T
- * @param {import("./index.js").InternalOptions<T>} options what to minify
- * @param {EXPECTED_OBJECT} overlay extra options for the minimizers that read them
- * @returns {import("./index.js").InternalOptions<T>} the same options, with the overlay applied
- */
-function withEmbeddedOverlay(options, overlay) {
-  const { implementation } = options.minimizer;
-  // Always an array: every caller builds the entry from matched indices.
-  const implementations =
-    /** @type {EXPECTED_ANY[]} */
-    (/** @type {unknown} */ (implementation));
-
-  return {
-    ...options,
-    minimizer: {
-      implementation,
-      options:
-        /** @type {EXPECTED_ANY} */
-        (
-          implementations.map((currentImplementation, i) => {
-            const entry = getMinimizerOptionsAt(options.minimizer.options, i);
-
-            return typeof (
-              /** @type {EXPECTED_ANY} */ (currentImplementation)
-                .getEmbeddedTypes
-            ) === "function"
-              ? { ...entry, ...overlay }
-              : entry;
-          })
-        ),
-    },
-  };
-}
-
 const JS_FILE_RE = /\.[cm]?js(\?.*)?$/i;
 const JSON_FILE_RE = /\.json(\?.*)?$/i;
 const HTML_FILE_RE = /\.html?(\?.*)?$/i;
@@ -2045,5 +2008,4 @@ module.exports = {
   terserMinify,
   throttleAll,
   uglifyJsMinify,
-  withEmbeddedOverlay,
 };
