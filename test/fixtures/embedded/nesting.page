@@ -1,0 +1,2 @@
+.a { COLOR : RED }
+/* nested <<  .b {  }  >> */

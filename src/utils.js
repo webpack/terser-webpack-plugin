@@ -22,7 +22,7 @@
 function getMinimizerOptionsAt(minimizerOptions, index) {
   return Array.isArray(minimizerOptions)
     ? minimizerOptions[index] || {}
-    : minimizerOptions || {};
+    : minimizerOptions;
 }
 
 /**
@@ -35,9 +35,10 @@ function getMinimizerOptionsAt(minimizerOptions, index) {
  */
 function withEmbeddedOverlay(options, overlay) {
   const { implementation } = options.minimizer;
-  const implementations = Array.isArray(implementation)
-    ? implementation
-    : [implementation];
+  // Always an array: every caller builds the entry from matched indices.
+  const implementations =
+    /** @type {EXPECTED_ANY[]} */
+    (/** @type {unknown} */ (implementation));
 
   return {
     ...options,

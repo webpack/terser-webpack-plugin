@@ -172,3 +172,136 @@ describe("embedded sources", () => {
     );
   });
 });
+
+// A minifier that both claims a language and can hand that same language out —
+// the shape webpack's own `cssMinify` has, and the one a single non-array
+// `minify` option takes.
+const nestedRe = () => /<<([\s\S]*?)>>/g;
+const collapse = (text) => text.replace(/\s+/g, "");
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {{ collectEmbeddedSource?: boolean, embeddedSources?: { type: string, source: string, rendered: string }[] }} minimizerOptions minimizer options
+ * @returns {EXPECTED_ANY} the sheet, and what it nests when asked to collect
+ */
+function selfNestingCssMinify(input, sourceMap, minimizerOptions) {
+  const [[, code]] = Object.entries(input);
+
+  asked.push(minimizerOptions.collectEmbeddedSource ? "collect" : "emit");
+
+  if (minimizerOptions.collectEmbeddedSource) {
+    const embeddedSources = [];
+    const re = nestedRe();
+    let match = re.exec(code);
+
+    while (match !== null) {
+      embeddedSources.push({ type: "css", source: match[1] });
+      match = re.exec(code);
+    }
+
+    // What the collecting pass emits is what an untapped run emits.
+    return { code: collapse(code), embeddedSources };
+  }
+
+  const answers = new Map(
+    (minimizerOptions.embeddedSources || []).map((entry) => [
+      entry.source,
+      entry.rendered,
+    ]),
+  );
+
+  return {
+    code: collapse(
+      code.replace(nestedRe(), (whole, body) =>
+        answers.has(body) ? `<<${answers.get(body)}>>` : whole,
+      ),
+    ),
+  };
+}
+
+selfNestingCssMinify.getTypes = () => ["css"];
+selfNestingCssMinify.getEmbeddedTypes = () => ["css"];
+selfNestingCssMinify.supportsWorker = () => false;
+selfNestingCssMinify.supportsWorkerThreads = () => false;
+selfNestingCssMinify.filter = (name) => /\.page$/i.test(name);
+
+/**
+ * A second minifier over the same asset that reads no nested source at all.
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @returns {{ code: string }} the input, untouched
+ */
+function passThroughMinify(input) {
+  const [[, code]] = Object.entries(input);
+
+  return { code };
+}
+
+passThroughMinify.getTypes = () => ["page"];
+passThroughMinify.supportsWorker = () => false;
+passThroughMinify.supportsWorkerThreads = () => false;
+passThroughMinify.filter = () => true;
+
+describe("embedded dispatch shapes", () => {
+  beforeEach(() => {
+    asked = [];
+  });
+
+  it("takes a single `minify` function and a single `minimizerOptions`", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/embedded/entry-nesting.js"),
+      target: "node",
+      output: {
+        path: path.resolve(__dirname, "helpers/dist"),
+        filename: "[name].js",
+        assetModuleFilename: "[name][ext]",
+      },
+      module: { rules: [{ test: /\.page$/, type: "asset/resource" }] },
+    });
+
+    // Neither is an array: one implementation, one options object shared by it.
+    new MinimizerPlugin({
+      test: /\.page$/i,
+      minify: selfNestingCssMinify,
+      minimizerOptions: {},
+      parallel: false,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    // The nested body is dispatched back to the same minimizer, which collects
+    // over it in turn and finds nothing further.
+    expect(asked).toEqual(["collect", "collect", "emit"]);
+    expect(readAsset("nesting.page", compiler, stats)).toContain("<<.b{}>>");
+  });
+
+  it("takes an options array shorter than the minimizers it pairs with", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/embedded/entry-page.js"),
+      target: "node",
+      output: {
+        path: path.resolve(__dirname, "helpers/dist"),
+        filename: "[name].js",
+        assetModuleFilename: "[name][ext]",
+      },
+      module: { rules: [{ test: /\.page$/, type: "asset/resource" }] },
+    });
+
+    // One entry for two implementations, and the second reads no nested source
+    // at all: the missing entry is an empty one, and it gets no overlay.
+    new MinimizerPlugin({
+      test: /\.page$/i,
+      minify: [pageMinify, fakeCssMinify, passThroughMinify],
+      minimizerOptions: [{}],
+      parallel: false,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(readAsset("host.page", compiler, stats)).toContain(
+      "<style>.a{color:red}</style>",
+    );
+  });
+});

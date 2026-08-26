@@ -1033,13 +1033,10 @@ class TerserPlugin {
    * @returns {Promise<MinimizedResult>} the result
    */
   async minifyEmbedded(options, run) {
-    const { implementation } = options.minimizer;
+    // Always an array: every caller builds the entry from matched indices.
     const implementations =
       /** @type {(BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers)[]} */
-      (
-        /** @type {unknown} */
-        (Array.isArray(implementation) ? implementation : [implementation])
-      );
+      (/** @type {unknown} */ (options.minimizer.implementation));
     let reachable = false;
 
     // Both declarations have to meet: a language one of these can hand out, and
