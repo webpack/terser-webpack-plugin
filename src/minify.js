@@ -378,10 +378,10 @@ async function minify(options) {
    * this run: the minimizer collects it and reports it against the asset that
    * embeds it, which is the only one there is.
    * @param {string} source the nested body
-   * @param {{ type: string }} info what it is
+   * @param {{ type: string, as?: string }} info what it is, and which production of it
    * @returns {Promise<{ code?: string, warnings?: (Error | string)[], errors?: (Error | string)[] } | undefined>} what came of it, or undefined
    */
-  const renderEmbeddedSource = async (source, { type }) => {
+  const renderEmbeddedSource = async (source, { type, as }) => {
     const matched = claiming(type);
 
     // `claiming` answers off `embedded`, so a match means there is one.
@@ -404,7 +404,16 @@ async function minify(options) {
         implementation:
           /** @type {EXPECTED_ANY} */
           (matched.map((i) => embeddedImplementations[i])),
-        options: /** @type {EXPECTED_ANY} */ (matched.map(embeddedOptionsAt)),
+        // `as` says which production of `type` this body is — an HTML `style=""`
+        // is CSS, but a block's contents rather than a stylesheet. It is the
+        // body's, not the configuration's, so it overrides.
+        options: /** @type {EXPECTED_ANY} */ (
+          matched.map((i) =>
+            as === undefined
+              ? embeddedOptionsAt(i)
+              : { ...embeddedOptionsAt(i), as },
+          )
+        ),
       },
     });
 

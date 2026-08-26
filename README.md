@@ -868,12 +868,11 @@ What this reaches:
   the document an `<iframe srcdoc>` holds, and the payload of a `url()` `data:`
   URL. This is how an inline `<script>` is minified by `terser` at all.
 
-A `style=""` arrives as **`css-declarations`**, not `css`: it holds a
-declaration list, with no selector, no at-rule and no rule of its own, so a
-minifier for a stylesheet is not a minifier for it — webpack's own `cssMinify`
-turns `color:red` into nothing at all. Claim that language only from a minifier
-that reads a declaration list; nothing claiming it leaves every `style=""` to
-webpack's built-in, which is what an untapped run does.
+A `style=""` arrives as **`css` with `as: "block-contents"`** — the same word
+`module.parser.css.as` uses. It holds a block's contents rather than a whole
+stylesheet, so a minifier claiming `css` is handed one either way and `as` says
+which it is. Ignore it at your peril: parsing a declaration list as a stylesheet
+finds no rule and returns nothing.
 
 The nested case needs a minifier that can hand its nested bodies out, which it
 also states for itself — webpack's `cssMinify` and `htmlMinify` do:
