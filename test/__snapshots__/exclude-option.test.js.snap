@@ -2,7 +2,7 @@
 
 exports[`exclude option should match snapshot for a single RegExp value: assets 1`] = `
 {
-  "entry.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "entry.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
   "excluded1.js": "/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
@@ -19,17 +19,17 @@ module.exports = function Bar1() {
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
@@ -47,11 +47,11 @@ module.exports = function Bar1() {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(508);
+/******/ 	let __webpack_exports__ = __webpack_require__(508);
 /******/ 	
 /******/ })()
 ;",
-  "excluded2.js": "(()=>{var r={93(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(93)})();",
+  "excluded2.js": "(()=>{var o={93(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(93)})();",
 }
 `;
 
@@ -61,7 +61,7 @@ exports[`exclude option should match snapshot for a single RegExp value: warning
 
 exports[`exclude option should match snapshot for a single String value: assets 1`] = `
 {
-  "entry.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "entry.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
   "excluded1.js": "/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
@@ -78,17 +78,17 @@ module.exports = function Bar1() {
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
@@ -106,11 +106,11 @@ module.exports = function Bar1() {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(508);
+/******/ 	let __webpack_exports__ = __webpack_require__(508);
 /******/ 	
 /******/ })()
 ;",
-  "excluded2.js": "(()=>{var r={93(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(93)})();",
+  "excluded2.js": "(()=>{var o={93(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(93)})();",
 }
 `;
 
@@ -120,7 +120,7 @@ exports[`exclude option should match snapshot for a single String value: warning
 
 exports[`exclude option should match snapshot for multiple RegExp values: assets 1`] = `
 {
-  "entry.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "entry.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
   "excluded1.js": "/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
@@ -137,17 +137,17 @@ module.exports = function Bar1() {
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
@@ -165,7 +165,7 @@ module.exports = function Bar1() {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(508);
+/******/ 	let __webpack_exports__ = __webpack_require__(508);
 /******/ 	
 /******/ })()
 ;",
@@ -185,17 +185,17 @@ module.exports = function Bar2() {
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
@@ -213,7 +213,7 @@ module.exports = function Bar2() {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(93);
+/******/ 	let __webpack_exports__ = __webpack_require__(93);
 /******/ 	
 /******/ })()
 ;",
@@ -226,7 +226,7 @@ exports[`exclude option should match snapshot for multiple RegExp values: warnin
 
 exports[`exclude option should match snapshot for multiple String values: assets 1`] = `
 {
-  "entry.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "entry.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
   "excluded1.js": "/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
@@ -243,17 +243,17 @@ module.exports = function Bar1() {
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
@@ -271,7 +271,7 @@ module.exports = function Bar1() {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(508);
+/******/ 	let __webpack_exports__ = __webpack_require__(508);
 /******/ 	
 /******/ })()
 ;",
@@ -291,17 +291,17 @@ module.exports = function Bar2() {
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
@@ -319,7 +319,7 @@ module.exports = function Bar2() {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(93);
+/******/ 	let __webpack_exports__ = __webpack_require__(93);
 /******/ 	
 /******/ })()
 ;",

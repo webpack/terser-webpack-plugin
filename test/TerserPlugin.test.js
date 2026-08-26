@@ -3,6 +3,8 @@ import crypto from "crypto";
 import path from "path";
 
 import { TraceMap } from "@jridgewell/trace-mapping";
+// the `import` plugin cannot parse `copy-webpack-plugin`'s dist bundle
+// eslint-disable-next-line import/namespace, import/default, import/no-named-as-default, import/no-named-as-default-member
 import CopyWebpackPlugin from "copy-webpack-plugin";
 import del from "del";
 import { SourceMapDevToolPlugin, javascript, util } from "webpack";

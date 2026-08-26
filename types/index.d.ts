@@ -36,8 +36,7 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   constructor(
     options?:
-      | (BasePluginOptions & DefinedDefaultMinimizerAndOptions<T>)
-      | undefined,
+      (BasePluginOptions & DefinedDefaultMinimizerAndOptions<T>) | undefined,
   );
   /**
    * @private
@@ -212,16 +211,10 @@ type ExtractCommentsFunction = (
   },
 ) => boolean;
 type ExtractCommentsCondition =
-  | boolean
-  | "all"
-  | "some"
-  | RegExp
-  | ExtractCommentsFunction;
+  boolean | "all" | "some" | RegExp | ExtractCommentsFunction;
 type ExtractCommentsFilename = TemplatePath;
 type ExtractCommentsBanner =
-  | boolean
-  | string
-  | ((commentsFile: string) => string);
+  boolean | string | ((commentsFile: string) => string);
 type ExtractCommentsObject = {
   /**
    * condition which comments need to be expected
@@ -386,8 +379,7 @@ type MinimizeFunctionHelpers = {
    * return true when the minimizer supports the asset, otherwise false. When an array of minimizers is configured, each asset is dispatched only to the minimizers whose `filter` accepts it. Assets rejected by every minimizer in the array are skipped entirely.
    */
   filter?:
-    | ((name: string, info?: AssetInfo) => boolean | undefined)
-    | undefined;
+    ((name: string, info?: AssetInfo) => boolean | undefined) | undefined;
   /**
    * the languages this minimizer minifies, e.g. `["css"]`. Source that carries no filename — what a module embeds in another language's output — is dispatched by this rather than by `test` / `filter`, and a minimizer that declares nothing is never handed any
    */
@@ -396,8 +388,7 @@ type MinimizeFunctionHelpers = {
    * the languages this minimizer can hand out from inside what it minifies, through the `collectEmbeddedSource` / `embeddedSources` options. Empty (or absent) means it nests nothing a caller can reach, and the collecting pass is not run
    */
   getEmbeddedTypes?:
-    | ((minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined)
-    | undefined;
+    ((minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined) | undefined;
 };
 type MinimizerImplementation<T> = T extends EXPECTED_ANY[]
   ? {

@@ -279,7 +279,11 @@ module.exports = function serialize(obj, options) {
         if (type === 'R') {
             // Sanitize flags to prevent code injection (only allow valid RegExp flag characters)
             var flags = String(regexps[valueIndex].flags).replace(/[^gimsuydv]/g, '');
-            return "new RegExp(" + serialize(regexps[valueIndex].source) + ", \"" + flags + "\")";
+            var regexpSource = regexps[valueIndex].source;
+            if (typeof regexpSource !== 'string') {
+                throw new TypeError('RegExp.source must be a string');
+            }
+            return "new RegExp(" + serialize(regexpSource) + ", \"" + flags + "\")";
         }
 
         if (type === 'M') {
@@ -307,7 +311,11 @@ module.exports = function serialize(obj, options) {
         }
 
         if (type === 'L') {
-            return "new URL(" + serialize(urls[valueIndex].toString(), options) + ")";
+            var urlStr = urls[valueIndex].toString();
+            if (typeof urlStr !== 'string') {
+                throw new TypeError('URL.toString() must return a string');
+            }
+            return "new URL(" + serialize(urlStr, options) + ")";
         }
 
         var fn = functions[valueIndex];

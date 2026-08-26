@@ -298,10 +298,7 @@ type minifyFn = (
           | undefined;
         filename?: string | ((fileData: any) => string) | undefined;
         banner?:
-          | string
-          | boolean
-          | ((commentsFile: string) => string)
-          | undefined;
+          string | boolean | ((commentsFile: string) => string) | undefined;
       }
     | undefined,
 ) => Promise<{
@@ -368,9 +365,7 @@ const minify = (input, sourceMap, minimizerOptions, extractsComments) => {
 
   // Custom logic for extract comments
   const { map, code } = require("uglify-module") // Or require('./path/to/uglify-module')
-    .minify(input, {
-      /* Your options for minification */
-    });
+    .minify(input, {/* Your options for minification */});
 
   return { map, code, warnings: [], errors: [], extractedComments: [] };
 };
@@ -580,10 +575,7 @@ type extractComments =
         | undefined;
       filename?: string | ((fileData: any) => string) | undefined;
       banner?:
-        | string
-        | boolean
-        | ((commentsFile: string) => string)
-        | undefined;
+        string | boolean | ((commentsFile: string) => string) | undefined;
     };
 ```
 
@@ -1399,9 +1391,7 @@ module.exports = {
       new MinimizerPlugin({
         minify: (file, sourceMap) => {
           // https://github.com/mishoo/UglifyJS2#minify-options
-          const uglifyJsOptions = {
-            /* your `uglify-js` package options */
-          };
+          const uglifyJsOptions = {/* your `uglify-js` package options */};
 
           if (sourceMap) {
             uglifyJsOptions.sourceMap = {

@@ -1,3 +1,6 @@
+// `@changesets/get-github-info` is exports-only, which the `import` plugin's
+// node resolver does not read
+// eslint-disable-next-line import/no-unresolved
 import { getInfo, getInfoFromPullRequest } from "@changesets/get-github-info";
 
 /** @typedef {import("@changesets/types").ChangelogFunctions} ChangelogFunctions */
