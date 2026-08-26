@@ -167,19 +167,28 @@ jobs:
         # aren't available on Node 10/12; `htmlMinifierTerser` requires Node
         # 14.13+; `esbuildMinify`/`esbuildMinifyCss` require Node 18+.
         #
+        # `should work with ES modules` drives `copy-webpack-plugin`, which
+        # declares `engines.node` as `>= 20.9.0` from v14 on and calls
+        # `Array.prototype.toSorted`, so it throws `toSorted is not a
+        # function` on anything older. Only that one test uses the plugin, so
+        # it is filtered by name rather than skipping the whole file.
+        #
         # `-u` is passed alongside the filter so Jest doesn't fail the CI run
         # over the snapshots whose owning tests are skipped by `-t` (Jest
         # treats them as obsolete when stdin isn't a TTY). The change is local
         # to the runner and never committed, so strict snapshot validation
-        # still happens on the Node 18+ rows that run the full suite.
+        # still happens on the Node 20+ rows that run the full suite.
         shell: bash
         run: |
           case "${{ matrix.node-version }}" in
             10.x|12.x)
-              npm run test:coverage -- --ci -u -t '^(?!.*(swcMinify|esbuildMinify|htmlMinifierTerser)).*$'
+              npm run test:coverage -- --ci -u -t '^(?!.*(swcMinify|esbuildMinify|htmlMinifierTerser|should work with ES modules)).*$'
               ;;
             14.x|16.x)
-              npm run test:coverage -- --ci -u -t '^(?!.*esbuildMinify).*$'
+              npm run test:coverage -- --ci -u -t '^(?!.*(esbuildMinify|should work with ES modules)).*$'
+              ;;
+            18.x)
+              npm run test:coverage -- --ci -u -t '^(?!.*should work with ES modules).*$'
               ;;
             *)
               npm run test:coverage -- --ci

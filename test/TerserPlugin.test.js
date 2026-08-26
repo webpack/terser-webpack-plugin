@@ -3,7 +3,6 @@ import crypto from "crypto";
 import path from "path";
 
 import { TraceMap } from "@jridgewell/trace-mapping";
-import CopyWebpackPlugin from "copy-webpack-plugin";
 import del from "del";
 import { SourceMapDevToolPlugin, javascript, util } from "webpack";
 import RequestShortener from "webpack/lib/RequestShortener";
@@ -813,6 +812,14 @@ describe("MinimizerPlugin", () => {
   });
 
   it("should work with ES modules", async () => {
+    // Required here rather than imported at the top of the file: from v14 on
+    // `copy-webpack-plugin` reaches for `require("node:path")` and declares
+    // `engines.node` as `>= 20.9.0`, so loading it on an older Node throws and
+    // would take the whole suite down with it. This is the only test that uses
+    // the plugin, and the workflow filters it out by name on those rows, so
+    // keeping the require inside the test body means they never load it.
+    const CopyWebpackPlugin = require("copy-webpack-plugin");
+
     const multiCompiler = getCompiler([
       {
         mode: "production",

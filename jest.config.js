@@ -1,12 +1,16 @@
-// The bundled CSS minimizers (`cssnano@7`, `@swc/css`, `lightningcss`,
-// `esbuild@0.27`) require modern Node and don't reliably install on the
+// The bundled CSS minimizers (`cssnano@8`, `@swc/css`, `lightningcss`,
+// `esbuild@0.28`) require modern Node and don't reliably install on the
 // Windows agents. Skip the dedicated CSS test file outright on rows that
-// can't run them so we don't end up with stale or missing snapshots. The
-// `@swc/html` minimizers require Node >= 14, so the dedicated swc-html file
-// is skipped on older Node for the same reason.
+// can't run them so we don't end up with stale or missing snapshots.
+// `cssnano@8` declares `engines.node` as `^22.11.0 || ^24.11.0 || >=26.0`
+// and reaches for `Array.prototype.difference`, which only lands in V8 13.x,
+// so anything older throws `trustedFunctions.difference is not a function`
+// at minify time rather than failing to install. The `@swc/html` minimizers
+// require Node >= 14, so the dedicated swc-html file is skipped on older
+// Node for the same reason.
 const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
 const IS_WINDOWS = process.platform === "win32";
-const RUN_CSS_TESTS = NODE_MAJOR >= 18 && !IS_WINDOWS;
+const RUN_CSS_TESTS = NODE_MAJOR >= 22 && !IS_WINDOWS;
 const RUN_SWC_HTML_TESTS = NODE_MAJOR >= 14;
 // `renderEmbeddedSource` and the `collectEmbeddedSource` / `embeddedSources`
 // passes landed in webpack 5.110; the plugin degrades to doing nothing without

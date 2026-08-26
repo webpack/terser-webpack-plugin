@@ -1428,6 +1428,10 @@ async function cssnanoMinify(
 
   try {
     postcss = require("postcss");
+    // cssnano exposes itself only through the `exports` field, which neither
+    // `moduleResolution: "node"` nor the `import` plugin's node resolver reads
+    // @ts-expect-error
+    // eslint-disable-next-line import/no-unresolved
     cssnano = require("cssnano");
   } catch (err) {
     return { errors: [/** @type {Error} */ (err)] };

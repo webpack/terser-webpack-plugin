@@ -2,10 +2,10 @@
 
 exports[`parallel option should match snapshot for the "2" value: assets 1`] = `
 {
-  "four.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "one.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "three.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "two.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "four.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "one.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "three.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "two.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -15,10 +15,10 @@ exports[`parallel option should match snapshot for the "2" value: warnings 1`] =
 
 exports[`parallel option should match snapshot for the "false" value: assets 1`] = `
 {
-  "four.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "one.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "three.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "two.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "four.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "one.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "three.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "two.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -28,8 +28,8 @@ exports[`parallel option should match snapshot for the "false" value: warnings 1
 
 exports[`parallel option should match snapshot for the "true" value and the number of files is less than the number of cores: assets 1`] = `
 {
-  "entry-0.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "entry-1.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "entry-0.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "entry-1.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -39,14 +39,14 @@ exports[`parallel option should match snapshot for the "true" value and the numb
 
 exports[`parallel option should match snapshot for the "true" value and the number of files is more than the number of cores: assets 1`] = `
 {
-  "eight.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "five.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "four.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "one.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "seven.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "six.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "three.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "two.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "eight.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "five.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "four.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "one.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "seven.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "six.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "three.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "two.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -56,10 +56,10 @@ exports[`parallel option should match snapshot for the "true" value and the numb
 
 exports[`parallel option should match snapshot for the "true" value and the number of files is same than the number of cores: assets 1`] = `
 {
-  "entry-0.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "entry-1.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "entry-2.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "entry-3.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "entry-0.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "entry-1.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "entry-2.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "entry-3.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -69,7 +69,7 @@ exports[`parallel option should match snapshot for the "true" value and the numb
 
 exports[`parallel option should match snapshot for the "true" value when only one file passed: assets 1`] = `
 {
-  "main.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "main.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -79,10 +79,10 @@ exports[`parallel option should match snapshot for the "true" value when only on
 
 exports[`parallel option should match snapshot for the "true" value: assets 1`] = `
 {
-  "four.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "one.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "three.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "two.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "four.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "one.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "three.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "two.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -92,10 +92,10 @@ exports[`parallel option should match snapshot for the "true" value: warnings 1`
 
 exports[`parallel option should match snapshot for the "undefined" value: assets 1`] = `
 {
-  "four.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "one.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "three.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "two.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "four.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "one.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "three.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "two.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
@@ -105,10 +105,10 @@ exports[`parallel option should match snapshot for the "undefined" value: warnin
 
 exports[`parallel option should match snapshot when a value is not specify: assets 1`] = `
 {
-  "four.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "one.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "three.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
-  "two.js": "(()=>{var r={921(r){r.exports=function(){console.log(7)}}},o={};(function t(e){var n=o[e];if(void 0!==n)return n.exports;var s=o[e]={exports:{}};return r[e](s,s.exports,t),s.exports})(921)})();",
+  "four.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "one.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "three.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
+  "two.js": "(()=>{var o={921(o){o.exports=function(){console.log(7)}}};const t={};(function n(r){const s=t[r];if(void 0!==s)return s.exports;const e=t[r]={exports:{}};return o[r](e,e.exports,n),e.exports})(921)})();",
 }
 `;
 
