@@ -830,6 +830,64 @@ module.exports = {
 };
 ```
 
+## Embedded source
+
+Source written in one language that reaches the bundle inside another is
+minified too, which no asset carries and an asset-level minimizer therefore
+never sees. It needs no option (webpack `>= 5.110.0`; older versions reach only
+what an asset nests inside itself).
+
+Such source has no filename, so `test` / `include` / `exclude` and each
+minimizer's `filter` — all of which match filenames — cannot dispatch it.
+**It is dispatched by the language it is written in**, which every minify
+function states for itself:
+
+```js
+myCssMinifier.getTypes = () => ["css"];
+```
+
+The built-ins declare `javascript` (`terserMinify`, `uglifyJsMinify`,
+`swcMinify`, `esbuildMinify`), `css` (`cssnanoMinify`, `cssoMinify`,
+`cleanCssMinify`, `esbuildMinifyCss`, `lightningCssMinify`, `swcMinifyCss`),
+`html` (`htmlMinifierTerser`, `swcMinifyHtml`, `swcMinifyHtmlFragment`,
+`minifyHtmlNode`) and `json` (`jsonMinify`); webpack's own `cssMinify` and
+`htmlMinify` declare `css` and `html`. A language **no configured minimizer
+claims — `svg` out of the box — is emitted exactly as it was written**, and a
+custom minify function without `getTypes` is never handed embedded source at
+all.
+
+What this reaches:
+
+- CSS and HTML a module embeds in a JavaScript string literal (every
+  `exportType` but `link`).
+- The text an `asset/source` module embeds, and the payload an `asset/inline`
+  module encodes — the payload before it is encoded, so the encoding covers
+  what came back.
+- What a document or a stylesheet nests inside itself: an inline `<style>`,
+  every `style=""`, a `<script>` holding JavaScript or JSON, an `<svg>`
+  subtree, the document an `<iframe srcdoc>` holds, and the payload of a
+  `url()` `data:` URL. This is how an inline `<script>` is minified by `terser`
+  at all.
+
+The nested case needs a minifier that can hand its nested bodies out, which it
+also states for itself — webpack's `cssMinify` and `htmlMinify` do:
+
+```js
+// The languages this minifier can offer, given the options it will run with.
+myHtmlMinifier.getEmbeddedTypes = (minimizerOptions) => ["css", "javascript"];
+```
+
+Reaching them costs an extra pass over the input, so **it is only run when the
+two declarations meet**: if nothing configured claims a language this minifier
+could offer, it is never asked, and minification is one plain pass exactly as
+before.
+
+> **Note**
+>
+> Source a module embeds in JavaScript is minified during code generation,
+> before the worker pool is up, so [`parallel`](#parallel) does not apply to it.
+> What an asset nests inside itself is minified in the pool with the asset.
+
 ## Examples
 
 ### Preserve Comments

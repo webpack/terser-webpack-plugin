@@ -1,5 +1,3 @@
-export type Task<T> = () => Promise<T>;
-export type FunctionReturning<T> = () => T;
 export type ExtractCommentsOptions =
   import("./index.js").ExtractCommentsOptions;
 export type ExtractCommentsFunction =
@@ -11,7 +9,10 @@ export type MinimizedResult = import("./index.js").MinimizedResult;
 export type CustomOptions = import("./index.js").CustomOptions;
 export type RawSourceMap = import("./index.js").RawSourceMap;
 export type EXPECTED_OBJECT = import("./index.js").EXPECTED_OBJECT;
+export type EXPECTED_ANY = import("./index.js").EXPECTED_ANY;
 export type ExtractedComments = string[];
+export type Task<T> = () => Promise<T>;
+export type FunctionReturning<T> = () => T;
 /**
  * Minify CSS using `clean-css`.
  * @param {Input} input input
@@ -33,6 +34,12 @@ export namespace cleanCssMinify {
    * @returns {boolean | undefined} true if worker threads are supported
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
@@ -61,6 +68,12 @@ export namespace cssnanoMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -88,6 +101,12 @@ export namespace cssoMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -113,6 +132,12 @@ export namespace esbuildMinify {
    * @returns {boolean | undefined} true if worker thread is supported, false otherwise
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
@@ -141,6 +166,12 @@ export namespace esbuildMinifyCss {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -158,6 +189,29 @@ export function getEcmaVersion(
     NonNullable<import("webpack").Configuration["output"]>["environment"]
   >,
 ): number;
+/** @typedef {import("./index.js").ExtractCommentsOptions} ExtractCommentsOptions */
+/** @typedef {import("./index.js").ExtractCommentsFunction} ExtractCommentsFunction */
+/** @typedef {import("./index.js").ExtractCommentsCondition} ExtractCommentsCondition */
+/** @typedef {import("./index.js").Input} Input */
+/** @typedef {import("./index.js").MinimizedResult} MinimizedResult */
+/** @typedef {import("./index.js").CustomOptions} CustomOptions */
+/** @typedef {import("./index.js").RawSourceMap} RawSourceMap */
+/** @typedef {import("./index.js").EXPECTED_OBJECT} EXPECTED_OBJECT */
+/** @typedef {import("./index.js").EXPECTED_ANY} EXPECTED_ANY */
+/**
+ * @typedef {string[]} ExtractedComments
+ */
+/**
+ * The options entry belonging to one minimizer: an array is parallel to the
+ * implementations, a single object is shared by all of them.
+ * @param {EXPECTED_ANY} minimizerOptions the options as configured
+ * @param {number} index index into the implementations
+ * @returns {EXPECTED_OBJECT} its options
+ */
+export function getMinimizerOptionsAt(
+  minimizerOptions: EXPECTED_ANY,
+  index: number,
+): EXPECTED_OBJECT;
 /**
  * Minify HTML using `html-minifier-terser`.
  * @param {Input} input input
@@ -180,6 +234,12 @@ export namespace htmlMinifierTerser {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
    */
@@ -200,6 +260,12 @@ export namespace jsonMinify {
   function getMinimizerVersion(): string;
   function supportsWorker(): boolean;
   function supportsWorkerThreads(): boolean;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JSON file
@@ -227,6 +293,12 @@ export namespace lightningCssMinify {
    * @returns {boolean | undefined} false because `lightningcss` is a native binding
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
@@ -265,6 +337,12 @@ export namespace minifyHtmlNode {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
    */
@@ -293,6 +371,12 @@ export namespace swcMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
    */
@@ -320,6 +404,12 @@ export namespace swcMinifyCss {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a CSS file
    */
@@ -346,6 +436,12 @@ export namespace swcMinifyHtml {
    * @returns {boolean | undefined} false because `@swc/html` is a native binding
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
@@ -377,6 +473,12 @@ export namespace swcMinifyHtmlFragment {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
    */
@@ -404,6 +506,12 @@ export namespace terserMinify {
    * @returns {boolean | undefined} true if worker thread is supported, false otherwise
    */
   function supportsWorkerThreads(): boolean | undefined;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
@@ -445,8 +553,26 @@ export namespace uglifyJsMinify {
    */
   function supportsWorkerThreads(): boolean | undefined;
   /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like a JavaScript file
    */
   function filter(name: string): boolean;
 }
+/**
+ * The options for one minification, with `overlay` merged into the entry of
+ * every minimizer that reads the embedded-source passes.
+ * @template T
+ * @param {import("./index.js").InternalOptions<T>} options what to minify
+ * @param {EXPECTED_OBJECT} overlay extra options for the minimizers that read them
+ * @returns {import("./index.js").InternalOptions<T>} the same options, with the overlay applied
+ */
+export function withEmbeddedOverlay<T>(
+  options: import("./index.js").InternalOptions<T>,
+  overlay: EXPECTED_OBJECT,
+): import("./index.js").InternalOptions<T>;

@@ -6,10 +6,61 @@
 /** @typedef {import("./index.js").CustomOptions} CustomOptions */
 /** @typedef {import("./index.js").RawSourceMap} RawSourceMap */
 /** @typedef {import("./index.js").EXPECTED_OBJECT} EXPECTED_OBJECT */
+/** @typedef {import("./index.js").EXPECTED_ANY} EXPECTED_ANY */
 
 /**
  * @typedef {string[]} ExtractedComments
  */
+
+/**
+ * The options entry belonging to one minimizer: an array is parallel to the
+ * implementations, a single object is shared by all of them.
+ * @param {EXPECTED_ANY} minimizerOptions the options as configured
+ * @param {number} index index into the implementations
+ * @returns {EXPECTED_OBJECT} its options
+ */
+function getMinimizerOptionsAt(minimizerOptions, index) {
+  return Array.isArray(minimizerOptions)
+    ? minimizerOptions[index] || {}
+    : minimizerOptions;
+}
+
+/**
+ * The options for one minification, with `overlay` merged into the entry of
+ * every minimizer that reads the embedded-source passes.
+ * @template T
+ * @param {import("./index.js").InternalOptions<T>} options what to minify
+ * @param {EXPECTED_OBJECT} overlay extra options for the minimizers that read them
+ * @returns {import("./index.js").InternalOptions<T>} the same options, with the overlay applied
+ */
+function withEmbeddedOverlay(options, overlay) {
+  const { implementation } = options.minimizer;
+  // Always an array: every caller builds the entry from matched indices.
+  const implementations =
+    /** @type {EXPECTED_ANY[]} */
+    (/** @type {unknown} */ (implementation));
+
+  return {
+    ...options,
+    minimizer: {
+      implementation,
+      options:
+        /** @type {EXPECTED_ANY} */
+        (
+          implementations.map((currentImplementation, i) => {
+            const entry = getMinimizerOptionsAt(options.minimizer.options, i);
+
+            return typeof (
+              /** @type {EXPECTED_ANY} */ (currentImplementation)
+                .getEmbeddedTypes
+            ) === "function"
+              ? { ...entry, ...overlay }
+              : entry;
+          })
+        ),
+    },
+  };
+}
 
 const JS_FILE_RE = /\.[cm]?js(\?.*)?$/i;
 const JSON_FILE_RE = /\.json(\?.*)?$/i;
@@ -364,6 +415,13 @@ terserMinify.getMinimizerVersion = () => {
 terserMinify.supportsWorkerThreads = () => true;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+terserMinify.getTypes = () => ["javascript"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a JavaScript file
  */
@@ -604,6 +662,13 @@ uglifyJsMinify.getMinimizerVersion = () => {
 uglifyJsMinify.supportsWorkerThreads = () => true;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+uglifyJsMinify.getTypes = () => ["javascript"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a JavaScript file
  */
@@ -841,6 +906,13 @@ swcMinify.getMinimizerVersion = () => {
 swcMinify.supportsWorkerThreads = () => false;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+swcMinify.getTypes = () => ["javascript"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a JavaScript file
  */
@@ -962,6 +1034,13 @@ esbuildMinify.getMinimizerVersion = () => {
 esbuildMinify.supportsWorkerThreads = () => false;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+esbuildMinify.getTypes = () => ["javascript"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a JavaScript file
  */
@@ -992,6 +1071,13 @@ async function jsonMinify(input, sourceMap, minimizerOptions) {
 jsonMinify.getMinimizerVersion = () => "1.0.0";
 jsonMinify.supportsWorker = () => false;
 jsonMinify.supportsWorkerThreads = () => false;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+jsonMinify.getTypes = () => ["json"];
 
 /**
  * @param {string} name asset name
@@ -1066,6 +1152,13 @@ htmlMinifierTerser.getMinimizerVersion = () => {
 htmlMinifierTerser.supportsWorkerThreads = () => true;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+htmlMinifierTerser.getTypes = () => ["html"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like an HTML file
  */
@@ -1117,6 +1210,13 @@ minifyHtmlNode.getMinimizerVersion = () => {
  * @returns {boolean | undefined} false because `@minify-html/node` is a native binding
  */
 minifyHtmlNode.supportsWorkerThreads = () => false;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+minifyHtmlNode.getTypes = () => ["html"];
 
 /**
  * @param {string} name asset name
@@ -1195,6 +1295,13 @@ swcMinifyHtml.getMinimizerVersion = () => {
 swcMinifyHtml.supportsWorkerThreads = () => false;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+swcMinifyHtml.getTypes = () => ["html"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like an HTML file
  */
@@ -1253,6 +1360,13 @@ swcMinifyHtmlFragment.getMinimizerVersion = () => {
  * @returns {boolean | undefined} false because `@swc/html` is a native binding
  */
 swcMinifyHtmlFragment.supportsWorkerThreads = () => false;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+swcMinifyHtmlFragment.getTypes = () => ["html"];
 
 /**
  * @param {string} name asset name
@@ -1407,6 +1521,13 @@ cssnanoMinify.getMinimizerVersion = () => {
 cssnanoMinify.supportsWorkerThreads = () => true;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+cssnanoMinify.getTypes = () => ["css"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a CSS file
  */
@@ -1465,6 +1586,13 @@ cssoMinify.getMinimizerVersion = () => {
  * @returns {boolean | undefined} true if worker threads are supported
  */
 cssoMinify.supportsWorkerThreads = () => true;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+cssoMinify.getTypes = () => ["css"];
 
 /**
  * @param {string} name asset name
@@ -1543,6 +1671,13 @@ cleanCssMinify.getMinimizerVersion = () => {
  * @returns {boolean | undefined} true if worker threads are supported
  */
 cleanCssMinify.supportsWorkerThreads = () => true;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+cleanCssMinify.getTypes = () => ["css"];
 
 /**
  * @param {string} name asset name
@@ -1666,6 +1801,13 @@ esbuildMinifyCss.getMinimizerVersion = () => {
 esbuildMinifyCss.supportsWorkerThreads = () => false;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+esbuildMinifyCss.getTypes = () => ["css"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a CSS file
  */
@@ -1739,6 +1881,13 @@ lightningCssMinify.getMinimizerVersion = () => {
  * @returns {boolean | undefined} false because `lightningcss` is a native binding
  */
 lightningCssMinify.supportsWorkerThreads = () => false;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+lightningCssMinify.getTypes = () => ["css"];
 
 /**
  * @param {string} name asset name
@@ -1831,6 +1980,13 @@ swcMinifyCss.getMinimizerVersion = () => {
 swcMinifyCss.supportsWorkerThreads = () => false;
 
 /**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own.
+ * @returns {string[]} the languages
+ */
+swcMinifyCss.getTypes = () => ["css"];
+
+/**
  * @param {string} name asset name
  * @returns {boolean} true if `name` looks like a CSS file
  */
@@ -1872,6 +2028,7 @@ module.exports = {
   esbuildMinify,
   esbuildMinifyCss,
   getEcmaVersion,
+  getMinimizerOptionsAt,
   htmlMinifierTerser,
   jsonMinify,
   lightningCssMinify,
@@ -1884,4 +2041,5 @@ module.exports = {
   terserMinify,
   throttleAll,
   uglifyJsMinify,
+  withEmbeddedOverlay,
 };

@@ -33,6 +33,7 @@
     "Etags",
     "uglif",
     "minifier",
+    "minifiers",
     "filebase",
     "toplevel",
     "commitlint",
@@ -47,7 +48,8 @@
     "sourcefile",
     "stringifier",
     "sourcesContent",
-    "esac"
+    "esac",
+    "srcdoc"
   ],
   "ignorePaths": [
     "CHANGELOG.md",
