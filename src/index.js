@@ -1,10 +1,7 @@
 const os = require("os");
 const path = require("path");
 
-const { validate } = require("schema-utils");
-
 const { minify } = require("./minify");
-const schema = require("./options.json");
 const {
   cleanCssMinify,
   cssnanoMinify,
@@ -194,6 +191,11 @@ const {
  * @typedef {BasePluginOptions & { minimizer: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> } }} InternalPluginOptions
  */
 
+const VALIDATION_CONFIGURATION = {
+  name: "Terser Plugin",
+  baseDataPath: "options",
+};
+
 const getTraceMapping = memoize(() => require("@jridgewell/trace-mapping"));
 const getSerializeJavascript = memoize(() => require("./serialize-javascript"));
 
@@ -205,10 +207,15 @@ class TerserPlugin {
    * @param {BasePluginOptions & DefinedDefaultMinimizerAndOptions<T>=} options options
    */
   constructor(options) {
-    validate(/** @type {Schema} */ (schema), options || {}, {
-      name: "Terser Plugin",
-      baseDataPath: "options",
-    });
+    // Kept for `apply()`, which is where validation runs now: webpack owns when
+    // it happens, and skips it entirely for `validate: false`.
+    /**
+     * @private
+     * @type {BasePluginOptions & DefinedDefaultMinimizerAndOptions<T>}
+     */
+    this.rawOptions =
+      /** @type {BasePluginOptions & DefinedDefaultMinimizerAndOptions<T>} */
+      (options || {});
 
     // TODO handle json and etc in the next major release
     // TODO make `minimizer` option instead `minify` and `terserOptions` in the next major release, also rename `terserMinify` to `terserMinimize`
@@ -223,7 +230,7 @@ class TerserPlugin {
       parallel = true,
       include,
       exclude,
-    } = options || {};
+    } = this.rawOptions;
 
     // `terserOptions` is a deprecated alias of `minimizerOptions`; prefer the
     // new name when both are provided.
@@ -1169,11 +1176,60 @@ class TerserPlugin {
   }
 
   /**
+   * Validates the options the plugin was constructed with.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @returns {void}
+   */
+  validateOptions(compiler) {
+    if (typeof compiler.validate === "function") {
+      compiler.validate(
+        () => /** @type {Schema} */ (require("./options.json")),
+        this.rawOptions,
+        VALIDATION_CONFIGURATION,
+      );
+
+      return;
+    }
+
+    // TODO remove in the next major release, when webpack >= 5.106 is the
+    // minimum and `compiler.validate` is always there.
+    const { validate } = require("schema-utils");
+
+    validate(
+      /** @type {Schema} */ (require("./options.json")),
+      this.rawOptions,
+      VALIDATION_CONFIGURATION,
+    );
+  }
+
+  /**
    * @param {Compiler} compiler compiler
    * @returns {void}
    */
   apply(compiler) {
     const pluginName = this.constructor.name;
+
+    let validated = false;
+    const validateOptions = () => {
+      if (validated) {
+        return;
+      }
+
+      validated = true;
+      this.validateOptions(compiler);
+    };
+
+    if (compiler.hooks.validate) {
+      compiler.hooks.validate.tap(pluginName, validateOptions);
+    }
+
+    // TODO remove in the next major release, once every supported webpack calls
+    // `validate` after it applies `optimization.minimizer`. Until then that hook
+    // reaches this plugin only where it sits in `plugins`, and webpack < 5.106
+    // has no such hook at all; `initialize` runs after either placement.
+    compiler.hooks.initialize.tap(pluginName, validateOptions);
+
     const availableNumberOfCores = TerserPlugin.getAvailableNumberOfCores(
       this.options.parallel,
     );
