@@ -1,7 +1,7 @@
-import fs from "fs";
 import path from "path";
 
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
+import del from "del";
 
 import MinimizerPlugin from "../src";
 
@@ -374,7 +374,9 @@ describe("minifyEmbedded option", () => {
       "helpers/dist/embedded-cache",
     );
 
-    fs.rmSync(cacheDirectory, { force: true, recursive: true });
+    // `del` rather than `fs.rmSync`, which needs a newer Node than this
+    // plugin supports.
+    await del(cacheDirectory);
 
     /**
      * @param {object} minimizerOptions options for the CSS minimizer
@@ -422,7 +424,7 @@ describe("minifyEmbedded option", () => {
     );
     expect(await buildWith({})).toBe(".a{margin:16px}");
 
-    fs.rmSync(cacheDirectory, { force: true, recursive: true });
+    await del(cacheDirectory);
   });
 
   it("keeps the map a source carried into what it is embedded as", async () => {

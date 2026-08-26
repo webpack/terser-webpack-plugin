@@ -54,6 +54,64 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private optimize;
   /**
+   * Every configured minimizer, in order. The `minify` option takes one or an
+   * array; embedded source is dispatched across all of them either way.
+   * @private
+   * @returns {(BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers)[]} the minimizers
+   */
+  private minimizers;
+  /**
+   * The minimizers claiming `type`, in configuration order. Source that carries
+   * no filename is dispatched by this rather than by `test` / `filter`.
+   * @private
+   * @param {string} type the language to minify
+   * @returns {number[]} indices into the configured minimizers
+   */
+  private minimizersForType;
+  /**
+   * The minimizer entry one dispatch hands to `minify`.
+   * @private
+   * @param {number[]} matched indices the language dispatched to
+   * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} the minimizer entry
+   */
+  private minimizerFor;
+  /**
+   * Whether this run could both be offered a nested language and do something
+   * with it. False means the collecting pass would only ever be told about
+   * bodies nothing here minifies, so it is not worth running.
+   * @private
+   * @param {InternalOptions<T>} options what to minify
+   * @returns {boolean} true when some nested language is reachable
+   */
+  private reachesEmbedded;
+  /**
+   * Minify one input, reaching whatever it embeds first — but only where some
+   * configured minimizer claims a language this input could offer. Otherwise
+   * the collecting pass would run for bodies nothing here can minify, so it is
+   * skipped and this is one plain minification.
+   *
+   * When it does run: the minifier reports what is nested inside, each body
+   * goes to whichever minimizer claims its language, and the answers are handed
+   * to the pass that emits. Nothing nested — the common case — still costs one
+   * pass, since the collecting pass emits exactly what an untapped one does.
+   * @private
+   * @param {InternalOptions<T>} options what to minify
+   * @param {(options: InternalOptions<T>) => Promise<MinimizedResult>} run runs one minification, in a worker when the pool is up
+   * @returns {Promise<MinimizedResult>} the result
+   */
+  private minifyEmbedded;
+  /**
+   * Minify every nested body a minimizer claims the language of. A body no
+   * minimizer claims is left out rather than handed back unchanged, so the
+   * minifier that emits falls back to whatever built-in it has for it.
+   * @private
+   * @param {string} host name of what embeds them
+   * @param {EmbeddedSource[]} sources the nested bodies
+   * @param {(options: InternalOptions<T>) => Promise<MinimizedResult>} run runs one minification
+   * @returns {Promise<{ embeddedSources: RenderedEmbeddedSource[], errors: (Error | string)[], warnings: (Error | string)[] }>} what each was minified to, and what was reported over them
+   */
+  private renderNested;
+  /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
    * `asset/source` file's text, an `asset/inline` payload. No asset carries
@@ -62,7 +120,6 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @private
    * @param {Compiler} compiler compiler
    * @param {Compilation} compilation compilation
-   * @param {EmbeddedMinimizer<T>} embedded the embedded-source dispatcher
    * @param {import("webpack").sources.Source} variesOn everything the minified answer varies on beyond the source itself
    * @param {import("webpack").sources.Source} source the embedded source
    * @param {EmbeddedSourceInfo} info what it is and where it is going

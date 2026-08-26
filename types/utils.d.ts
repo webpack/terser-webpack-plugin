@@ -1,5 +1,3 @@
-export type Task<T> = () => Promise<T>;
-export type FunctionReturning<T> = () => T;
 export type ExtractCommentsOptions =
   import("./index.js").ExtractCommentsOptions;
 export type ExtractCommentsFunction =
@@ -11,7 +9,10 @@ export type MinimizedResult = import("./index.js").MinimizedResult;
 export type CustomOptions = import("./index.js").CustomOptions;
 export type RawSourceMap = import("./index.js").RawSourceMap;
 export type EXPECTED_OBJECT = import("./index.js").EXPECTED_OBJECT;
+export type EXPECTED_ANY = import("./index.js").EXPECTED_ANY;
 export type ExtractedComments = string[];
+export type Task<T> = () => Promise<T>;
+export type FunctionReturning<T> = () => T;
 /**
  * Minify CSS using `clean-css`.
  * @param {Input} input input
@@ -188,6 +189,49 @@ export function getEcmaVersion(
     NonNullable<import("webpack").Configuration["output"]>["environment"]
   >,
 ): number;
+/**
+ * The languages a minimizer says it can hand out from inside what it minifies,
+ * through the `collectEmbeddedSource` / `embeddedSources` passes. Empty for one
+ * that does not read them, and for one whose options turn them off.
+ * @param {EXPECTED_ANY} implementation minimizer
+ * @param {EXPECTED_OBJECT} minimizerOptions the options it will run with
+ * @returns {string[]} the languages
+ */
+export function getMinimizerEmbeddedTypes(
+  implementation: EXPECTED_ANY,
+  minimizerOptions: EXPECTED_OBJECT,
+): string[];
+/**
+ * The options entry belonging to one minimizer: an array is parallel to the
+ * implementations, a single object is shared by all of them.
+ * @param {EXPECTED_ANY} minimizerOptions the options as configured
+ * @param {number} index index into the implementations
+ * @returns {EXPECTED_OBJECT} its options
+ */
+export function getMinimizerOptionsAt(
+  minimizerOptions: EXPECTED_ANY,
+  index: number,
+): EXPECTED_OBJECT;
+/** @typedef {import("./index.js").ExtractCommentsOptions} ExtractCommentsOptions */
+/** @typedef {import("./index.js").ExtractCommentsFunction} ExtractCommentsFunction */
+/** @typedef {import("./index.js").ExtractCommentsCondition} ExtractCommentsCondition */
+/** @typedef {import("./index.js").Input} Input */
+/** @typedef {import("./index.js").MinimizedResult} MinimizedResult */
+/** @typedef {import("./index.js").CustomOptions} CustomOptions */
+/** @typedef {import("./index.js").RawSourceMap} RawSourceMap */
+/** @typedef {import("./index.js").EXPECTED_OBJECT} EXPECTED_OBJECT */
+/** @typedef {import("./index.js").EXPECTED_ANY} EXPECTED_ANY */
+/**
+ * @typedef {string[]} ExtractedComments
+ */
+/**
+ * The languages a minimizer says it minifies, through the `getTypes` ability it
+ * declares. One that says nothing takes no embedded source: such source carries
+ * no filename to guess from, and guessing is what the ability replaces.
+ * @param {EXPECTED_ANY} implementation minimizer
+ * @returns {string[]} the languages
+ */
+export function getMinimizerTypes(implementation: EXPECTED_ANY): string[];
 /**
  * Minify HTML using `html-minifier-terser`.
  * @param {Input} input input
@@ -540,3 +584,15 @@ export namespace uglifyJsMinify {
    */
   function filter(name: string): boolean;
 }
+/**
+ * The options for one minification, with `overlay` merged into the entry of
+ * every minimizer that reads the embedded-source passes.
+ * @template T
+ * @param {import("./index.js").InternalOptions<T>} options what to minify
+ * @param {EXPECTED_OBJECT} overlay extra options for the minimizers that read them
+ * @returns {import("./index.js").InternalOptions<T>} the same options, with the overlay applied
+ */
+export function withEmbeddedOverlay<T>(
+  options: import("./index.js").InternalOptions<T>,
+  overlay: EXPECTED_OBJECT,
+): import("./index.js").InternalOptions<T>;

@@ -6,10 +6,87 @@
 /** @typedef {import("./index.js").CustomOptions} CustomOptions */
 /** @typedef {import("./index.js").RawSourceMap} RawSourceMap */
 /** @typedef {import("./index.js").EXPECTED_OBJECT} EXPECTED_OBJECT */
+/** @typedef {import("./index.js").EXPECTED_ANY} EXPECTED_ANY */
 
 /**
  * @typedef {string[]} ExtractedComments
  */
+
+/**
+ * The languages a minimizer says it minifies, through the `getTypes` ability it
+ * declares. One that says nothing takes no embedded source: such source carries
+ * no filename to guess from, and guessing is what the ability replaces.
+ * @param {EXPECTED_ANY} implementation minimizer
+ * @returns {string[]} the languages
+ */
+function getMinimizerTypes(implementation) {
+  return typeof implementation.getTypes === "function"
+    ? implementation.getTypes() || []
+    : [];
+}
+
+/**
+ * The languages a minimizer says it can hand out from inside what it minifies,
+ * through the `collectEmbeddedSource` / `embeddedSources` passes. Empty for one
+ * that does not read them, and for one whose options turn them off.
+ * @param {EXPECTED_ANY} implementation minimizer
+ * @param {EXPECTED_OBJECT} minimizerOptions the options it will run with
+ * @returns {string[]} the languages
+ */
+function getMinimizerEmbeddedTypes(implementation, minimizerOptions) {
+  return typeof implementation.getEmbeddedTypes === "function"
+    ? implementation.getEmbeddedTypes(minimizerOptions) || []
+    : [];
+}
+
+/**
+ * The options entry belonging to one minimizer: an array is parallel to the
+ * implementations, a single object is shared by all of them.
+ * @param {EXPECTED_ANY} minimizerOptions the options as configured
+ * @param {number} index index into the implementations
+ * @returns {EXPECTED_OBJECT} its options
+ */
+function getMinimizerOptionsAt(minimizerOptions, index) {
+  return Array.isArray(minimizerOptions)
+    ? minimizerOptions[index] || {}
+    : minimizerOptions || {};
+}
+
+/**
+ * The options for one minification, with `overlay` merged into the entry of
+ * every minimizer that reads the embedded-source passes.
+ * @template T
+ * @param {import("./index.js").InternalOptions<T>} options what to minify
+ * @param {EXPECTED_OBJECT} overlay extra options for the minimizers that read them
+ * @returns {import("./index.js").InternalOptions<T>} the same options, with the overlay applied
+ */
+function withEmbeddedOverlay(options, overlay) {
+  const { implementation } = options.minimizer;
+  const implementations = Array.isArray(implementation)
+    ? implementation
+    : [implementation];
+
+  return {
+    ...options,
+    minimizer: {
+      implementation,
+      options:
+        /** @type {EXPECTED_ANY} */
+        (
+          implementations.map((currentImplementation, i) => {
+            const entry = getMinimizerOptionsAt(options.minimizer.options, i);
+
+            return typeof (
+              /** @type {EXPECTED_ANY} */ (currentImplementation)
+                .getEmbeddedTypes
+            ) === "function"
+              ? { ...entry, ...overlay }
+              : entry;
+          })
+        ),
+    },
+  };
+}
 
 const JS_FILE_RE = /\.[cm]?js(\?.*)?$/i;
 const JSON_FILE_RE = /\.json(\?.*)?$/i;
@@ -1977,6 +2054,9 @@ module.exports = {
   esbuildMinify,
   esbuildMinifyCss,
   getEcmaVersion,
+  getMinimizerEmbeddedTypes,
+  getMinimizerOptionsAt,
+  getMinimizerTypes,
   htmlMinifierTerser,
   jsonMinify,
   lightningCssMinify,
@@ -1989,4 +2069,5 @@ module.exports = {
   terserMinify,
   throttleAll,
   uglifyJsMinify,
+  withEmbeddedOverlay,
 };
