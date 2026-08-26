@@ -863,11 +863,12 @@ What this reaches:
 - The text an `asset/source` module embeds, and the payload an `asset/inline`
   module encodes — the payload before it is encoded, so the encoding covers
   what came back.
-- What a document or a stylesheet nests inside itself: an inline `<style>`,
-  every `style=""`, a `<script>` holding JavaScript or JSON, an `<svg>`
-  subtree, the document an `<iframe srcdoc>` holds, and the payload of a
-  `url()` `data:` URL. This is how an inline `<script>` is minified by `terser`
-  at all.
+- What a document or a stylesheet nests inside itself: an inline `<style>`, a
+  `<script>` holding JavaScript or JSON, an `<svg>` subtree, the document an
+  `<iframe srcdoc>` holds, and the payload of a `url()` `data:` URL. This is how
+  an inline `<script>` is minified by `terser` at all. A `style=""` is webpack's
+  own CSS minifier's, whose text the printer reads back to decide how the
+  attribute is written.
 
 The nested case needs a minifier that can hand its nested bodies out, which it
 also states for itself — webpack's `cssMinify` and `htmlMinify` do:
@@ -877,10 +878,12 @@ also states for itself — webpack's `cssMinify` and `htmlMinify` do:
 myHtmlMinifier.getEmbeddedTypes = (minimizerOptions) => ["css", "javascript"];
 ```
 
-Reaching them costs an extra pass over the input, so **it is only run when the
-two declarations meet**: if nothing configured claims a language this minifier
-could offer, it is never asked, and minification is one plain pass exactly as
-before.
+The option is passed only when **the two declarations meet**: if nothing
+configured claims a language this minifier could offer, it is never handed one,
+and minification is exactly what it always was. When it is, the nested bodies
+are reached **in the same parse that prints** — the minifier leaves a marker
+where each one goes and the answers are put in their place, so nothing is parsed
+twice.
 
 > **Note**
 >

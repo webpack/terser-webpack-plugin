@@ -564,15 +564,3 @@ export namespace uglifyJsMinify {
    */
   function filter(name: string): boolean;
 }
-/**
- * The options for one minification, with `overlay` merged into the entry of
- * every minimizer that reads the embedded-source passes.
- * @template T
- * @param {import("./index.js").InternalOptions<T>} options what to minify
- * @param {EXPECTED_OBJECT} overlay extra options for the minimizers that read them
- * @returns {import("./index.js").InternalOptions<T>} the same options, with the overlay applied
- */
-export function withEmbeddedOverlay<T>(
-  options: import("./index.js").InternalOptions<T>,
-  overlay: EXPECTED_OBJECT,
-): import("./index.js").InternalOptions<T>;

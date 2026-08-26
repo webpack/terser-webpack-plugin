@@ -69,28 +69,23 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private minimizersForType;
   /**
+   * Every configured minimizer and its options, for dispatching source one
+   * language embeds in another. The asset's own entry holds only what its
+   * filename matched, and a language's minimizer need not be among them — a
+   * `.css` asset embedding an `<svg>` reaches an SVG minifier that claims no
+   * asset at all.
+   * @private
+   * @param {number[]} matched indices of the minimizers this input's own entry holds
+   * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T>, claims: string[][], offers: string[][], at: number[] } | undefined} every configured minimizer, or undefined when nothing nested could be reached
+   */
+  private embeddedMinimizer;
+  /**
    * The minimizer entry one dispatch hands to `minify`.
    * @private
    * @param {number[]} matched indices the language dispatched to
    * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} the minimizer entry
    */
   private minimizerFor;
-  /**
-   * Minify one input, reaching whatever it embeds first — but only where some
-   * configured minimizer claims a language this input could offer. Otherwise
-   * the collecting pass would run for bodies nothing here can minify, so it is
-   * skipped and this is one plain minification.
-   *
-   * When it does run: the minifier reports what is nested inside, each body
-   * goes to whichever minimizer claims its language, and the answers are handed
-   * to the pass that emits. Nothing nested — the common case — still costs one
-   * pass, since the collecting pass emits exactly what an untapped one does.
-   * @private
-   * @param {InternalOptions<T>} options what to minify
-   * @param {(options: InternalOptions<T>) => Promise<MinimizedResult>} run runs one minification, in a worker when the pool is up
-   * @returns {Promise<MinimizedResult>} the result
-   */
-  private minifyEmbedded;
   /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
@@ -151,8 +146,6 @@ declare namespace TerserPlugin {
     ErrorObject,
     EmbeddedSourceInfo,
     EmbeddedSourceHooks,
-    EmbeddedSource,
-    RenderedEmbeddedSource,
     MinimizedResult,
     Input,
     CustomOptions,
@@ -310,23 +303,6 @@ type EmbeddedSourceHooks = {
       }
     | undefined;
 };
-/**
- * One body written in another language that the minified source embeds — an
- * inline `<style>` or `<script>`, an `<svg>` subtree, a `data:` payload.
- */
-type EmbeddedSource = {
-  /**
-   * the body's language, e.g. `"css"` / `"javascript"` / `"svg"`
-   */
-  type: string;
-  /**
-   * the body as it was written
-   */
-  source: string;
-};
-type RenderedEmbeddedSource = EmbeddedSource & {
-  rendered: string;
-};
 type MinimizedResult = {
   /**
    * code
@@ -348,10 +324,6 @@ type MinimizedResult = {
    * extracted comments
    */
   extractedComments?: string[] | undefined;
-  /**
-   * what the source embeds, when the minimizer was asked to collect it
-   */
-  embeddedSources?: EmbeddedSource[] | undefined;
 };
 type Input = {
   [file: string]: string;
@@ -393,7 +365,7 @@ type MinimizeFunctionHelpers = {
    */
   getTypes?: (() => string[] | undefined) | undefined;
   /**
-   * the languages this minimizer can hand out from inside what it minifies, through the `collectEmbeddedSource` / `embeddedSources` options. Empty (or absent) means it nests nothing a caller can reach, and the collecting pass is not run
+   * the languages this minimizer can hand out from inside what it minifies, through the `renderEmbeddedSource` option. Empty (or absent) means it nests nothing a caller can reach, and the option is not passed
    */
   getEmbeddedTypes?:
     | ((minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined)
@@ -429,6 +401,18 @@ type InternalOptions<T> = {
     implementation: MinimizerImplementation<T>;
     options: MinimizerOptions<T>;
   };
+  /**
+   * every configured minimizer, for source one language embeds in another: it carries no filename, so `minimizer` — which holds only what this asset's name matched — is not the set to dispatch it across. `claims` is the languages each minifies and `offers` the languages each can hand out, both as data and both parallel to `implementation`, since a minify function reaches a worker as source and carries none of its properties; `at` says which of them `minimizer` holds. Absent when no nested language is reachable at all
+   */
+  embedded?:
+    | {
+        implementation: MinimizerImplementation<T>;
+        options: MinimizerOptions<T>;
+        claims: string[][];
+        offers: string[][];
+        at: number[];
+      }
+    | undefined;
   /**
    * true when code is a EC module, otherwise false
    */

@@ -1,6 +1,7 @@
 /** @typedef {import("./index.js").MinimizedResult} MinimizedResult */
 /** @typedef {import("./index.js").CustomOptions} CustomOptions */
 /** @typedef {import("./index.js").RawSourceMap} RawSourceMap */
+/** @typedef {import("./index.js").EXPECTED_ANY} EXPECTED_ANY */
 /**
  * @template T
  * @typedef {import("./index.js").MinimizerOptions<T>} MinimizerOptions
@@ -318,8 +319,109 @@ async function minify(options) {
   const errors = [];
   /** @type {string[]} */
   const extractedComments = [];
-  /** @type {import("./index.js").EmbeddedSource[]} */
-  const embeddedSources = [];
+
+  /**
+   * The options entry belonging to one minimizer: an array is parallel to the
+   * implementations, a single object is shared by all of them.
+   * @param {number} index index into the implementations
+   * @returns {EXPECTED_ANY} its options
+   */
+  const optionsAt = (index) =>
+    Array.isArray(minimizerOptions)
+      ? minimizerOptions[index] || {}
+      : minimizerOptions || {};
+
+  // Source one language embeds in another carries no filename, so it is
+  // dispatched across every configured minimizer rather than the ones this
+  // asset's name matched — and by what each declared, which travels as data
+  // because a minify function reaches a worker as source.
+  const { embedded } = options;
+  const embeddedImplementations = embedded
+    ? /** @type {EXPECTED_ANY[]} */ (
+        /** @type {unknown} */ (embedded.implementation)
+      )
+    : [];
+  /**
+   * @param {number} index index into the embedded implementations
+   * @returns {EXPECTED_ANY} its options
+   */
+  const embeddedOptionsAt = (index) =>
+    /** @type {EXPECTED_ANY[]} */ (
+      /** @type {unknown} */ ((embedded || { options: [] }).options)
+    )[index] || {};
+
+  /**
+   * The minimizers declaring `type` among the languages they minify. Source one
+   * language embeds in another carries no filename, so `test` / `filter` cannot
+   * dispatch it and `getTypes` answers instead.
+   * @param {string} type the language
+   * @returns {number[]} indices into the implementations
+   */
+  const claiming = (type) => {
+    const matched = [];
+    const claims = embedded ? embedded.claims : [];
+
+    for (let i = 0; i < claims.length; i++) {
+      if (claims[i].includes(type)) matched.push(i);
+    }
+
+    return matched;
+  };
+
+  /**
+   * Minify one body a minimizer hands out from inside what it minifies, and
+   * hand it back for the same print. Recursion is this function calling
+   * `minify` again, so a body that nests something of its own is reached too.
+   * Declining leaves the body exactly as the minimizer would have written it.
+   * @param {string} source the nested body
+   * @param {{ type: string }} info what it is
+   * @returns {Promise<string | undefined>} the minified body, or undefined
+   */
+  const renderEmbeddedSource = async (source, { type }) => {
+    const matched = claiming(type);
+
+    // `claiming` answers off `embedded`, so a match means there is one.
+    if (matched.length === 0 || embedded === undefined) return undefined;
+
+    const nested = await minify({
+      /** @type {EXPECTED_ANY} */
+      name,
+      input: source,
+      inputSourceMap: undefined,
+      extractComments: false,
+      // The nested minimizers are these indices, so `at` moves with them.
+      embedded: { ...embedded, at: matched },
+      minimizer: {
+        implementation:
+          /** @type {EXPECTED_ANY} */
+          (matched.map((i) => embeddedImplementations[i])),
+        options: /** @type {EXPECTED_ANY} */ (matched.map(embeddedOptionsAt)),
+      },
+    });
+
+    // What went wrong inside belongs to what embeds it: there is no asset of
+    // its own for it to be reported against.
+    if (nested.errors) errors.push(...nested.errors);
+    if (nested.warnings) warnings.push(...nested.warnings);
+
+    return (nested.errors && nested.errors.length > 0) ||
+      typeof nested.code !== "string"
+      ? undefined
+      : nested.code;
+  };
+
+  /**
+   * Whether `index`'s minimizer could hand out a language something configured
+   * here claims. False means offering it would only ever reach bodies with
+   * nowhere to go, so the option is left off and it prints as it always has.
+   * @param {number} index index into the implementations
+   * @returns {boolean} true when some nested language is reachable
+   */
+  const reachesEmbedded = (index) =>
+    embedded !== undefined &&
+    (embedded.offers[embedded.at[index]] || []).some(
+      (type) => claiming(type).length > 0,
+    );
 
   for (let i = 0; i < implementations.length; i++) {
     const currentImplementation =
@@ -327,11 +429,7 @@ async function minify(options) {
       (implementations[i]);
     const baseOptions =
       /** @type {import("./index.js").MinimizerOptions<T> & { module?: boolean, ecma?: number | string }} */
-      (
-        Array.isArray(minimizerOptions)
-          ? minimizerOptions[i] || {}
-          : minimizerOptions || {}
-      );
+      (optionsAt(i));
     const currentInput = typeof lastCode === "string" ? lastCode : input;
     const currentMap = typeof lastCode === "string" ? lastMap : inputSourceMap;
 
@@ -343,6 +441,9 @@ async function minify(options) {
         ...baseOptions,
         module: baseOptions.module || module,
         ecma: baseOptions.ecma || ecma,
+        // Only for a minimizer that says it reads the option: every other one is
+        // handed its own options untouched, so nothing sees a key it does not know.
+        ...(reachesEmbedded(i) ? { renderEmbeddedSource } : {}),
       });
 
     const result = await currentImplementation(
@@ -364,10 +465,6 @@ async function minify(options) {
       extractedComments.push(...result.extractedComments);
     }
 
-    if (result.embeddedSources && result.embeddedSources.length > 0) {
-      embeddedSources.push(...result.embeddedSources);
-    }
-
     if (typeof result.code === "string") {
       lastCode = result.code;
       // The minimizer's output map is `name → step-output`. Chain it with
@@ -377,22 +474,13 @@ async function minify(options) {
     }
   }
 
-  /** @type {MinimizedResult} */
-  const result = {
+  return {
     code: lastCode,
     map: lastMap,
     warnings,
     errors,
     extractedComments,
   };
-
-  // Only when something was collected, so a minimizer that does not read the
-  // embedded-source passes returns exactly what it always has.
-  if (embeddedSources.length > 0) {
-    result.embeddedSources = embeddedSources;
-  }
-
-  return result;
 }
 
 /**

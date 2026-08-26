@@ -25,7 +25,6 @@ const {
   terserMinify,
   throttleAll,
   uglifyJsMinify,
-  withEmbeddedOverlay,
 } = require("./utils");
 
 /** @typedef {import("schema-utils/declarations/validate").Schema} Schema */
@@ -103,25 +102,12 @@ const {
  */
 
 /**
- * One body written in another language that the minified source embeds — an
- * inline `<style>` or `<script>`, an `<svg>` subtree, a `data:` payload.
- * @typedef {object} EmbeddedSource
- * @property {string} type the body's language, e.g. `"css"` / `"javascript"` / `"svg"`
- * @property {string} source the body as it was written
- */
-
-/**
- * @typedef {EmbeddedSource & { rendered: string }} RenderedEmbeddedSource
- */
-
-/**
  * @typedef {object} MinimizedResult
  * @property {string=} code code
  * @property {RawSourceMap=} map source map
  * @property {(Error | string)[]=} errors errors
  * @property {(Error | string)[]=} warnings warnings
  * @property {string[]=} extractedComments extracted comments
- * @property {EmbeddedSource[]=} embeddedSources what the source embeds, when the minimizer was asked to collect it
  */
 
 /**
@@ -159,7 +145,7 @@ const {
  * @property {() => boolean | undefined=} supportsWorker true when minimizer support worker, otherwise false
  * @property {(name: string, info?: AssetInfo) => boolean | undefined=} filter return true when the minimizer supports the asset, otherwise false. When an array of minimizers is configured, each asset is dispatched only to the minimizers whose `filter` accepts it. Assets rejected by every minimizer in the array are skipped entirely.
  * @property {() => string[] | undefined=} getTypes the languages this minimizer minifies, e.g. `["css"]`. Source that carries no filename — what a module embeds in another language's output — is dispatched by this rather than by `test` / `filter`, and a minimizer that declares nothing is never handed any
- * @property {(minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined=} getEmbeddedTypes the languages this minimizer can hand out from inside what it minifies, through the `collectEmbeddedSource` / `embeddedSources` options. Empty (or absent) means it nests nothing a caller can reach, and the collecting pass is not run
+ * @property {(minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined=} getEmbeddedTypes the languages this minimizer can hand out from inside what it minifies, through the `renderEmbeddedSource` option. Empty (or absent) means it nests nothing a caller can reach, and the option is not passed
  */
 
 /**
@@ -175,6 +161,7 @@ const {
  * @property {RawSourceMap | undefined} inputSourceMap input source map
  * @property {ExtractCommentsOptions | undefined} extractComments extract comments option
  * @property {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} minimizer minimizer
+ * @property {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T>, claims: string[][], offers: string[][], at: number[] }=} embedded every configured minimizer, for source one language embeds in another: it carries no filename, so `minimizer` — which holds only what this asset's name matched — is not the set to dispatch it across. `claims` is the languages each minifies and `offers` the languages each can hand out, both as data and both parallel to `implementation`, since a minify function reaches a worker as source and carries none of its properties; `at` says which of them `minimizer` holds. Absent when no nested language is reachable at all
  * @property {boolean=} module true when code is a EC module, otherwise false
  * @property {number | string=} ecma ecma version
  */
@@ -583,10 +570,6 @@ class TerserPlugin {
       getWorker
         ? getWorker().transform(getSerializeJavascript()(options))
         : minify(options);
-    // Both passes an embedded-source minimizer takes are plain data, so an
-    // asset reaches what it nests inside itself without leaving the pool.
-    /** @type {typeof run} */
-    const runMinify = (options) => this.minifyEmbedded(options, run);
 
     /** @typedef {{ extractedCommentsSource: import("webpack").sources.RawSource, commentsFilename: string }} ExtractedCommentsInfo */
     /** @type {Map<string, ExtractedCommentsInfo>} */
@@ -652,6 +635,7 @@ class TerserPlugin {
               options: assetMinimizerOptions,
             },
             extractComments: this.options.extractComments,
+            embedded: this.embeddedMinimizer(matched),
           };
 
           if (typeof info.javascriptModule !== "undefined") {
@@ -665,7 +649,7 @@ class TerserPlugin {
           options.ecma = getEcmaVersion(compiler.options.output.environment);
 
           try {
-            output = await runMinify(options);
+            output = await run(options);
           } catch (error) {
             const hasSourceMap =
               inputSourceMap && TerserPlugin.isSourceMap(inputSourceMap);
@@ -995,6 +979,69 @@ class TerserPlugin {
   }
 
   /**
+   * Every configured minimizer and its options, for dispatching source one
+   * language embeds in another. The asset's own entry holds only what its
+   * filename matched, and a language's minimizer need not be among them — a
+   * `.css` asset embedding an `<svg>` reaches an SVG minifier that claims no
+   * asset at all.
+   * @private
+   * @param {number[]} matched indices of the minimizers this input's own entry holds
+   * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T>, claims: string[][], offers: string[][], at: number[] } | undefined} every configured minimizer, or undefined when nothing nested could be reached
+   */
+  embeddedMinimizer(matched) {
+    const minimizers = this.minimizers();
+    // What each declares travels as data, not on the function: a minify function
+    // reaches a worker as its source, which carries none of its properties.
+    const claims = minimizers.map((minimizer) =>
+      typeof minimizer.getTypes === "function"
+        ? minimizer.getTypes() || []
+        : [],
+    );
+    const offers = minimizers.map((minimizer, i) => {
+      const { getEmbeddedTypes } = minimizer;
+
+      return typeof getEmbeddedTypes === "function"
+        ? getEmbeddedTypes(
+            getMinimizerOptionsAt(this.options.minimizer.options, i),
+          ) || []
+        : [];
+    });
+
+    // Both declarations have to meet, or offering a body would only ever reach
+    // one with nowhere to go.
+    if (
+      !matched.some((i) =>
+        offers[i].some((type) =>
+          claims.some((claimed) => claimed.includes(type)),
+        ),
+      )
+    ) {
+      return undefined;
+    }
+
+    return {
+      implementation:
+        /** @type {MinimizerImplementation<T>} */
+        (/** @type {unknown} */ (minimizers)),
+      options:
+        /** @type {MinimizerOptions<T>} */
+        (
+          /** @type {unknown} */
+          (
+            minimizers.map((_, i) =>
+              getMinimizerOptionsAt(this.options.minimizer.options, i),
+            )
+          )
+        ),
+      claims,
+      offers,
+      // Which of them this input's own entry holds, so the languages it can
+      // offer are read off the same arrays after a round trip through a worker.
+      at: matched,
+    };
+  }
+
+  /**
    * The minimizer entry one dispatch hands to `minify`.
    * @private
    * @param {number[]} matched indices the language dispatched to
@@ -1014,124 +1061,6 @@ class TerserPlugin {
           /** @type {unknown} */
           (matched.map((i) => getMinimizerOptionsAt(options, i)))
         ),
-    };
-  }
-
-  /**
-   * Minify one input, reaching whatever it embeds first — but only where some
-   * configured minimizer claims a language this input could offer. Otherwise
-   * the collecting pass would run for bodies nothing here can minify, so it is
-   * skipped and this is one plain minification.
-   *
-   * When it does run: the minifier reports what is nested inside, each body
-   * goes to whichever minimizer claims its language, and the answers are handed
-   * to the pass that emits. Nothing nested — the common case — still costs one
-   * pass, since the collecting pass emits exactly what an untapped one does.
-   * @private
-   * @param {InternalOptions<T>} options what to minify
-   * @param {(options: InternalOptions<T>) => Promise<MinimizedResult>} run runs one minification, in a worker when the pool is up
-   * @returns {Promise<MinimizedResult>} the result
-   */
-  async minifyEmbedded(options, run) {
-    // Always an array: every caller builds the entry from matched indices.
-    const implementations =
-      /** @type {(BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers)[]} */
-      (/** @type {unknown} */ (options.minimizer.implementation));
-    let reachable = false;
-
-    // Both declarations have to meet: a language one of these can hand out, and
-    // a configured minimizer that claims it.
-    for (let i = 0; i < implementations.length && !reachable; i++) {
-      const { getEmbeddedTypes } = implementations[i];
-
-      reachable =
-        typeof getEmbeddedTypes === "function" &&
-        (
-          getEmbeddedTypes(
-            getMinimizerOptionsAt(options.minimizer.options, i),
-          ) || []
-        ).some((type) => this.minimizersForType(type).length > 0);
-    }
-
-    if (!reachable) {
-      return run(options);
-    }
-
-    const collected = await run(
-      withEmbeddedOverlay(options, {
-        collectEmbeddedSource: true,
-      }),
-    );
-
-    if (!collected.embeddedSources || collected.embeddedSources.length === 0) {
-      return collected;
-    }
-
-    /** @type {(Error | string)[]} */
-    const errors = [];
-    /** @type {(Error | string)[]} */
-    const warnings = [];
-    // A body no minimizer claims is left out rather than handed back unchanged,
-    // so the minifier that emits falls back to whatever built-in it has for it.
-    const rendered = await Promise.all(
-      collected.embeddedSources.map(async ({ type, source }) => {
-        const matched = this.minimizersForType(type);
-
-        if (matched.length === 0) {
-          return undefined;
-        }
-
-        const result = await this.minifyEmbedded(
-          {
-            name: options.name,
-            input: source,
-            inputSourceMap: undefined,
-            extractComments: false,
-            minimizer: this.minimizerFor(matched),
-          },
-          run,
-        );
-
-        if (result.errors) {
-          errors.push(...result.errors);
-        }
-
-        if (result.warnings) {
-          warnings.push(...result.warnings);
-        }
-
-        // A nested body that failed keeps the text it was written with, which
-        // is what leaving it out of the answers spells.
-        if (
-          (result.errors && result.errors.length > 0) ||
-          typeof result.code !== "string"
-        ) {
-          return undefined;
-        }
-
-        return { type, source, rendered: result.code };
-      }),
-    );
-    const embeddedSources =
-      /** @type {RenderedEmbeddedSource[]} */
-      (rendered.filter((entry) => typeof entry !== "undefined"));
-    // Everything nested was declined, so the collecting pass already emitted
-    // what a second one would.
-    const result =
-      embeddedSources.length === 0
-        ? collected
-        : await run(withEmbeddedOverlay(options, { embeddedSources }));
-
-    // What went wrong inside belongs to what embeds it: there is no asset of
-    // its own for it to be reported against.
-    if (errors.length === 0 && warnings.length === 0) {
-      return result;
-    }
-
-    return {
-      ...result,
-      errors: [...(result.errors || []), ...errors],
-      warnings: [...(result.warnings || []), ...warnings],
     };
   }
 
@@ -1188,24 +1117,23 @@ class TerserPlugin {
       let result;
 
       try {
-        result = await this.minifyEmbedded(
-          {
-            name,
-            input,
-            inputSourceMap,
-            // There is no asset to hang a banner on, and no filename to point
-            // it at, so comments stay where the minimizer's own defaults keep
-            // them.
-            extractComments: false,
-            minimizer: this.minimizerFor(matched),
-            ecma: getEcmaVersion(
-              /** @type {NonNullable<NonNullable<import("webpack").Configuration["output"]>["environment"]>} */
-              (compiler.options.output.environment),
-            ),
-          },
-          // Code generation runs before the worker pool is up.
-          minify,
-        );
+        // Code generation runs before the worker pool is up, so this one is in
+        // process. What it embeds in turn is reached by `minify` itself.
+        result = await minify({
+          name,
+          input,
+          inputSourceMap,
+          // There is no asset to hang a banner on, and no filename to point
+          // it at, so comments stay where the minimizer's own defaults keep
+          // them.
+          extractComments: false,
+          minimizer: this.minimizerFor(matched),
+          embedded: this.embeddedMinimizer(matched),
+          ecma: getEcmaVersion(
+            /** @type {NonNullable<NonNullable<import("webpack").Configuration["output"]>["environment"]>} */
+            (compiler.options.output.environment),
+          ),
+        });
       } catch (error) {
         compilation.errors.push(
           TerserPlugin.buildError(
