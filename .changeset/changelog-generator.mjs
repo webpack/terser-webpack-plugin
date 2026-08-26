@@ -1,9 +1,10 @@
 // `@changesets/get-github-info` is exports-only, which the `import` plugin's
 // node resolver does not read
 // eslint-disable-next-line import/no-unresolved
-import { getInfo, getInfoFromPullRequest } from "@changesets/get-github-info";
+import { getCommitInfo, getPullRequestInfo } from "@changesets/get-github-info";
 
 /** @typedef {import("@changesets/types").ChangelogFunctions} ChangelogFunctions */
+/** @typedef {{ commit: string | null, pull: string | null, user: string | null }} Links */
 
 /**
  * @returns {{ GITHUB_SERVER_URL: string }} value
@@ -32,11 +33,11 @@ const changelogFunctions = {
       await Promise.all(
         changesets.map(async (cs) => {
           if (cs.commit) {
-            const { links } = await getInfo({
+            const info = await getCommitInfo({
               repo: options.repo,
               commit: cs.commit,
             });
-            return links.commit;
+            return info && info.commit.markdownLink;
           }
         }),
       )
@@ -85,28 +86,35 @@ const changelogFunctions = {
       .split("\n")
       .map((l) => l.trimEnd());
 
+    /** @type {Links} */
     const links = await (async () => {
       if (prFromSummary !== undefined) {
-        let { links } = await getInfoFromPullRequest({
+        const info = await getPullRequestInfo({
           repo: options.repo,
           pull: prFromSummary,
         });
-        if (commitFromSummary) {
-          const shortCommitId = commitFromSummary.slice(0, 7);
-          links = {
-            ...links,
-            commit: `[\`${shortCommitId}\`](${GITHUB_SERVER_URL}/${options.repo}/commit/${commitFromSummary})`,
-          };
-        }
-        return links;
+        const commit = commitFromSummary
+          ? `[\`${commitFromSummary.slice(0, 7)}\`](${GITHUB_SERVER_URL}/${options.repo}/commit/${commitFromSummary})`
+          : (info && info.commit && info.commit.markdownLink) || null;
+
+        return {
+          commit,
+          pull: (info && info.pull.markdownLink) || null,
+          user: (info && info.author && info.author.markdownLink) || null,
+        };
       }
       const commitToFetchFrom = commitFromSummary || changeset.commit;
       if (commitToFetchFrom) {
-        const { links } = await getInfo({
+        const info = await getCommitInfo({
           repo: options.repo,
           commit: commitToFetchFrom,
         });
-        return links;
+
+        return {
+          commit: (info && info.commit.markdownLink) || null,
+          pull: (info && info.pull && info.pull.markdownLink) || null,
+          user: (info && info.author && info.author.markdownLink) || null,
+        };
       }
       return {
         commit: null,
