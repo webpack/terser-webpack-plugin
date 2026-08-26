@@ -373,9 +373,13 @@ async function minify(options) {
    * hand it back for the same print. Recursion is this function calling
    * `minify` again, so a body that nests something of its own is reached too.
    * Declining leaves the body exactly as the minimizer would have written it.
+   *
+   * What went wrong inside is answered with the body rather than pushed onto
+   * this run: the minimizer collects it and reports it against the asset that
+   * embeds it, which is the only one there is.
    * @param {string} source the nested body
    * @param {{ type: string }} info what it is
-   * @returns {Promise<string | undefined>} the minified body, or undefined
+   * @returns {Promise<{ code?: string, warnings?: (Error | string)[], errors?: (Error | string)[] } | undefined>} what came of it, or undefined
    */
   const renderEmbeddedSource = async (source, { type }) => {
     const matched = claiming(type);
@@ -399,15 +403,27 @@ async function minify(options) {
       },
     });
 
-    // What went wrong inside belongs to what embeds it: there is no asset of
-    // its own for it to be reported against.
-    if (nested.errors) errors.push(...nested.errors);
-    if (nested.warnings) warnings.push(...nested.warnings);
+    /** @type {{ code?: string, warnings?: (Error | string)[], errors?: (Error | string)[] }} */
+    const answer = {};
 
-    return (nested.errors && nested.errors.length > 0) ||
-      typeof nested.code !== "string"
-      ? undefined
-      : nested.code;
+    if (nested.warnings && nested.warnings.length > 0) {
+      answer.warnings = nested.warnings;
+    }
+
+    if (nested.errors && nested.errors.length > 0) {
+      answer.errors = nested.errors;
+    }
+
+    // A body that failed keeps the text it was written with, which is what
+    // answering without a `code` spells.
+    if (
+      (!nested.errors || nested.errors.length === 0) &&
+      typeof nested.code === "string"
+    ) {
+      answer.code = nested.code;
+    }
+
+    return answer;
   };
 
   /**

@@ -2,13 +2,55 @@ import path from "path";
 
 import MinimizerPlugin from "../src";
 
-import { compile, getCompiler, getErrors, readAsset } from "./helpers";
+import {
+  compile,
+  getCompiler,
+  getErrors,
+  getWarnings,
+  readAsset,
+} from "./helpers";
 
 // The `renderEmbeddedSource` dispatch on its own: a minimizer hands out what it
 // nests, each body goes to whichever minimizer claims its language, and the
 // answer comes back for the same print. Driven by
 // minify functions written here rather than webpack's, so it holds on every
 // webpack the plugin supports — including ones with no embedded-source hook.
+
+// A renderer may answer with the text alone or with a whole result — what it
+// minified plus anything it has to report. webpack's own minifiers unwrap it
+// this way, so these stand-ins do too.
+const answerText = (answer) =>
+  answer === undefined || typeof answer === "string" ? answer : answer.code;
+
+// Anything the renderer throws is reported rather than dropped, and the body is
+// spelled as an untapped run spells it — which is what webpack's minifiers do.
+const askRenderer = async (render, source, type) => {
+  try {
+    return await render(source, { type });
+  } catch (error) {
+    return { errors: [error] };
+  }
+};
+
+// And what it reported travels back with the asset that embeds the body: there
+// is no asset of its own for it to be reported against.
+const answerDiagnostics = (answers) => {
+  const warnings = [];
+  const errors = [];
+
+  for (const answer of answers) {
+    if (answer === undefined || typeof answer === "string") continue;
+    if (answer.warnings) warnings.push(...answer.warnings);
+    if (answer.errors) errors.push(...answer.errors);
+  }
+
+  const out = {};
+
+  if (warnings.length !== 0) out.warnings = warnings;
+  if (errors.length !== 0) out.errors = errors;
+
+  return out;
+};
 
 // Built per call: a `g` regexp carries `lastIndex` between uses, and this file
 // runs on every Node the plugin supports — including ones without `matchAll`.
@@ -49,13 +91,17 @@ async function pageMinify(input, sourceMap, minimizerOptions) {
   }
 
   const rendered = await Promise.all(
-    bodies.map(({ source, type }) => renderEmbeddedSource(source, { type })),
+    bodies.map(({ source, type }) =>
+      askRenderer(renderEmbeddedSource, source, type),
+    ),
   );
   const answers = new Map();
 
   for (let i = 0; i < bodies.length; i++) {
-    if (typeof rendered[i] === "string") {
-      answers.set(bodies[i].source, rendered[i]);
+    const text = answerText(rendered[i]);
+
+    if (typeof text === "string") {
+      answers.set(bodies[i].source, text);
     }
   }
 
@@ -63,6 +109,7 @@ async function pageMinify(input, sourceMap, minimizerOptions) {
     code: code.replace(bodyRe(), (whole, tag, body) =>
       answers.has(body) ? `<${tag}>${answers.get(body)}</${tag}>` : whole,
     ),
+    ...answerDiagnostics(rendered),
   };
 }
 
@@ -88,6 +135,33 @@ fakeCssMinify.supportsWorkerThreads = () => false;
 // Claims no asset at all: a minimizer can be configured for embedded source
 // alone, since `filter` answers for assets and `getTypes` for languages.
 fakeCssMinify.filter = () => false;
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @returns {{ code: string, warnings: string[] }} the body, with something to say about it
+ */
+function noisyJsMinify(input) {
+  const [[, code]] = Object.entries(input);
+
+  return { code: code.trim(), warnings: ["watch out"] };
+}
+
+noisyJsMinify.getTypes = () => ["javascript"];
+noisyJsMinify.supportsWorker = () => false;
+noisyJsMinify.supportsWorkerThreads = () => false;
+noisyJsMinify.filter = () => false;
+
+/**
+ * @returns {never} never returns
+ */
+function throwingJsMinify() {
+  throw new Error("blew up");
+}
+
+throwingJsMinify.getTypes = () => ["javascript"];
+throwingJsMinify.supportsWorker = () => false;
+throwingJsMinify.supportsWorkerThreads = () => false;
+throwingJsMinify.filter = () => false;
 
 /**
  * @returns {{ code: undefined, errors: Error[] }} a failure, reported rather than thrown
@@ -165,6 +239,32 @@ describe("embedded sources", () => {
     expect(asked).toEqual(["plain"]);
   });
 
+  it("reports what a nested minimizer had to say about a body", async () => {
+    const compiler = getPageCompiler([pageMinify, noisyJsMinify]);
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toHaveLength(1);
+    expect(getWarnings(stats)[0]).toMatch(/watch out/);
+    // A warning is not a failure: the body is still written back minified.
+    expect(readAsset("host.page", compiler, stats)).toContain(
+      "<script>var  a  =  1</script>",
+    );
+  });
+
+  it("reports a nested minimizer that threw, and keeps the body", async () => {
+    const compiler = getPageCompiler([pageMinify, throwingJsMinify]);
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(/blew up/);
+    // Read off the compilation rather than the output: an errored build emits
+    // nothing, but the body it threw over is still spelled as it was written.
+    expect(stats.compilation.getAsset("host.page").source.source()).toContain(
+      "<script>  var  a  =  1  </script>",
+    );
+  });
+
   it("reports a nested failure against the document that holds it", async () => {
     const compiler = getPageCompiler([pageMinify, failingJsMinify]);
     const stats = await compile(compiler);
@@ -208,12 +308,14 @@ async function selfNestingCssMinify(input, sourceMap, minimizerOptions) {
   }
 
   const rendered = await Promise.all(
-    bodies.map((source) => renderEmbeddedSource(source, { type: "css" })),
+    bodies.map((source) => askRenderer(renderEmbeddedSource, source, "css")),
   );
   const answers = new Map();
 
   for (let i = 0; i < bodies.length; i++) {
-    if (typeof rendered[i] === "string") answers.set(bodies[i], rendered[i]);
+    const text = answerText(rendered[i]);
+
+    if (typeof text === "string") answers.set(bodies[i], text);
   }
 
   return {
@@ -222,6 +324,7 @@ async function selfNestingCssMinify(input, sourceMap, minimizerOptions) {
         answers.has(body) ? `<<${answers.get(body)}>>` : whole,
       ),
     ),
+    ...answerDiagnostics(rendered),
   };
 }
 
