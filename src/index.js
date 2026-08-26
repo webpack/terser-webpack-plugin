@@ -973,11 +973,19 @@ class TerserPlugin {
    * @param {Compiler} compiler compiler
    * @param {Compilation} compilation compilation
    * @param {EmbeddedMinimizer<T>} embedded the embedded-source dispatcher
+   * @param {import("webpack").sources.Source} variesOn everything the minified answer varies on beyond the source itself
    * @param {import("webpack").sources.Source} source the embedded source
    * @param {EmbeddedSourceInfo} info what it is and where it is going
    * @returns {Promise<import("webpack").sources.Source>} the minified source, or the original
    */
-  async renderEmbeddedSource(compiler, compilation, embedded, source, info) {
+  async renderEmbeddedSource(
+    compiler,
+    compilation,
+    embedded,
+    variesOn,
+    source,
+    info,
+  ) {
     const { type, hostType, module } = info;
     const matched = embedded.match(type);
 
@@ -988,9 +996,15 @@ class TerserPlugin {
     const name = module.nameForCondition() || module.identifier();
 
     const cache = compilation.getCache("TerserWebpackPlugin|embeddedSource");
+    // The minimizers and their options are in the etag, not just the source:
+    // this cache outlives the build, so an entry stored under one set of
+    // options must not answer for another.
     const cacheItem = cache.getItemCache(
       `${name}|${type}|${hostType}`,
-      cache.getLazyHashedEtag(source),
+      cache.mergeEtags(
+        cache.getLazyHashedEtag(source),
+        cache.getLazyHashedEtag(variesOn),
+      ),
     );
     let output =
       /** @type {{ source: import("webpack").sources.Source, errors?: (Error | string)[], warnings?: (Error | string)[] } | undefined} */
@@ -1144,6 +1158,9 @@ class TerserPlugin {
           run: minify,
         });
 
+        // Wrapped once so the etag it yields is computed once per build.
+        const variesOn = new compiler.webpack.sources.RawSource(data);
+
         embeddedHooks.renderEmbeddedSource.tapPromise(
           pluginName,
           (source, info) =>
@@ -1151,6 +1168,7 @@ class TerserPlugin {
               compiler,
               compilation,
               embedded,
+              variesOn,
               source,
               info,
             ),

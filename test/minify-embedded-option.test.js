@@ -1,4 +1,7 @@
+import fs from "fs";
 import path from "path";
+
+import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 
 import MinimizerPlugin from "../src";
 
@@ -365,9 +368,66 @@ describe("minifyEmbedded option", () => {
     expect(getWarnings(stats)[0]).toMatch(/Warning: odd, that/);
   });
 
+  it("does not answer an embedded source from a cache another option filled", async () => {
+    const cacheDirectory = path.resolve(
+      __dirname,
+      "helpers/dist/embedded-cache",
+    );
+
+    fs.rmSync(cacheDirectory, { force: true, recursive: true });
+
+    /**
+     * @param {object} minimizerOptions options for the CSS minimizer
+     * @returns {Promise<string>} the stylesheet as it was embedded
+     */
+    const buildWith = async (minimizerOptions) => {
+      const compiler = getCompiler({
+        entry: fixture("entry-length.js"),
+        target: "node",
+        cache: { type: "filesystem", cacheDirectory },
+        experiments: { css: true },
+        module: {
+          rules: [
+            {
+              test: /\.css$/,
+              type: "css/auto",
+              parser: { exportType: "text" },
+            },
+          ],
+        },
+      });
+
+      defaultPlugin({ minimizerOptions: [{}, minimizerOptions, {}] }).apply(
+        compiler,
+      );
+
+      const stats = await compile(compiler);
+
+      expect(getErrors(stats)).toEqual([]);
+
+      const embedded = exported(compiler, stats);
+
+      // The pack is written on close, so the next build sees this one.
+      await new Promise((resolve) => {
+        compiler.close(() => resolve());
+      });
+
+      return embedded;
+    };
+
+    // `16px` -> `1pc` is what the option does, so the two builds must differ.
+    expect(await buildWith({})).toBe(".a{margin:16px}");
+    expect(await buildWith({ convertLengthUnits: true })).toBe(
+      ".a{margin:1pc}",
+    );
+    expect(await buildWith({})).toBe(".a{margin:16px}");
+
+    fs.rmSync(cacheDirectory, { force: true, recursive: true });
+  });
+
   it("keeps the map a source carried into what it is embedded as", async () => {
     const compiler = getCompiler({
-      entry: fixture("entry-css.js"),
+      entry: fixture("entry-mapped.js"),
       target: "node",
       devtool: "source-map",
       experiments: { css: true },
@@ -386,9 +446,39 @@ describe("minifyEmbedded option", () => {
     const bundle = readAsset("main.js", compiler, stats);
 
     expect(getErrors(stats)).toEqual([]);
-    expect(bundle).toContain(".a{color:red;margin:10px}");
-    // The generator inlines the map the minimizer composed back to the source.
-    expect(bundle).toContain("sourceMappingURL=data:application/json");
+    expect(bundle).toContain(".a{color:red}.b{margin:10px}");
+
+    // The generator inlines the map the minimizer composed, so it has to point
+    // at the stylesheet rather than at the minified text.
+    const inlined = bundle.match(
+      /sourceMappingURL=data:application\/json;charset=utf-8;base64,([\d+/=A-Za-z]+)/,
+    );
+
+    expect(inlined).not.toBeNull();
+
+    const map = JSON.parse(
+      Buffer.from(
+        /** @type {RegExpMatchArray} */ (inlined)[1],
+        "base64",
+      ).toString("utf8"),
+    );
+
+    expect(map.sources).toHaveLength(1);
+    expect(map.sources[0]).toMatch(/mapped\.css$/);
+    expect(map.sourcesContent[0]).toContain("#ff0000");
+
+    // Both rules land on the line they were written on: `.b` is at column 13
+    // of the one minified line, and on line 5 of the stylesheet.
+    const trace = new TraceMap(map);
+
+    expect(originalPositionFor(trace, { line: 1, column: 0 })).toMatchObject({
+      line: 1,
+      column: 0,
+    });
+    expect(originalPositionFor(trace, { line: 1, column: 13 })).toMatchObject({
+      line: 5,
+      column: 0,
+    });
   });
 
   describe("what a document or a stylesheet nests inside itself", () => {

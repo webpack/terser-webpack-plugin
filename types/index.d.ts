@@ -63,6 +63,7 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @param {Compiler} compiler compiler
    * @param {Compilation} compilation compilation
    * @param {EmbeddedMinimizer<T>} embedded the embedded-source dispatcher
+   * @param {import("webpack").sources.Source} variesOn everything the minified answer varies on beyond the source itself
    * @param {import("webpack").sources.Source} source the embedded source
    * @param {EmbeddedSourceInfo} info what it is and where it is going
    * @returns {Promise<import("webpack").sources.Source>} the minified source, or the original
