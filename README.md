@@ -863,12 +863,17 @@ What this reaches:
 - The text an `asset/source` module embeds, and the payload an `asset/inline`
   module encodes — the payload before it is encoded, so the encoding covers
   what came back.
-- What a document or a stylesheet nests inside itself: an inline `<style>`, a
-  `<script>` holding JavaScript or JSON, an `<svg>` subtree, the document an
-  `<iframe srcdoc>` holds, and the payload of a `url()` `data:` URL. This is how
-  an inline `<script>` is minified by `terser` at all. A `style=""` is webpack's
-  own CSS minifier's, whose text the printer reads back to decide how the
-  attribute is written.
+- What a document or a stylesheet nests inside itself: an inline `<style>`,
+  every `style=""`, a `<script>` holding JavaScript or JSON, an `<svg>` subtree,
+  the document an `<iframe srcdoc>` holds, and the payload of a `url()` `data:`
+  URL. This is how an inline `<script>` is minified by `terser` at all.
+
+A `style=""` arrives as **`css-declarations`**, not `css`: it holds a
+declaration list, with no selector, no at-rule and no rule of its own, so a
+minifier for a stylesheet is not a minifier for it — webpack's own `cssMinify`
+turns `color:red` into nothing at all. Claim that language only from a minifier
+that reads a declaration list; nothing claiming it leaves every `style=""` to
+webpack's built-in, which is what an untapped run does.
 
 The nested case needs a minifier that can hand its nested bodies out, which it
 also states for itself — webpack's `cssMinify` and `htmlMinify` do:
