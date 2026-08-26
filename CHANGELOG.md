@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.7.0
+
+### Minor Changes
+
+- minify source one language embeds in another - CSS or HTML reaching the bundle inside a JavaScript string literal, an `asset/source` file's text, an `asset/inline` payload, and what a document or a stylesheet nests inside itself (an inline `<style>` or `<script>`, an `<svg>` subtree, a `url()` `data:` payload) - dispatched by the language each minify function declares it minifies, reached in the same parse that prints, and reporting whatever the minimizer that reached it had to say against the asset holding it (by [@alexander-akait](https://github.com/alexander-akait) in [#695](https://github.com/webpack/minimizer-webpack-plugin/pull/695))
+
 ## 5.6.1
 
 ### Patch Changes
