@@ -954,31 +954,6 @@ class TerserPlugin {
   }
 
   /**
-   * The minimizers claiming `type`, in configuration order. Source that carries
-   * no filename is dispatched by this rather than by `test` / `filter`.
-   * @private
-   * @param {string} type the language to minify
-   * @returns {number[]} indices into the configured minimizers
-   */
-  minimizersForType(type) {
-    const minimizers = this.minimizers();
-    const matched = [];
-
-    // A minimizer that declares nothing takes no embedded source: such source
-    // carries no filename to guess from, and guessing is what `getTypes`
-    // replaces.
-    for (let i = 0; i < minimizers.length; i++) {
-      const { getTypes } = minimizers[i];
-
-      if (typeof getTypes === "function" && (getTypes() || []).includes(type)) {
-        matched.push(i);
-      }
-    }
-
-    return matched;
-  }
-
-  /**
    * Every configured minimizer and its options, for dispatching source one
    * language embeds in another. The asset's own entry holds only what its
    * filename matched, and a language's minimizer need not be among them — a
@@ -1042,29 +1017,6 @@ class TerserPlugin {
   }
 
   /**
-   * The minimizer entry one dispatch hands to `minify`.
-   * @private
-   * @param {number[]} matched indices the language dispatched to
-   * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} the minimizer entry
-   */
-  minimizerFor(matched) {
-    const minimizers = this.minimizers();
-    const { options } = this.options.minimizer;
-
-    return {
-      implementation:
-        /** @type {MinimizerImplementation<T>} */
-        (/** @type {unknown} */ (matched.map((i) => minimizers[i]))),
-      options:
-        /** @type {MinimizerOptions<T>} */
-        (
-          /** @type {unknown} */
-          (matched.map((i) => getMinimizerOptionsAt(options, i)))
-        ),
-    };
-  }
-
-  /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
    * `asset/source` file's text, an `asset/inline` payload. No asset carries
@@ -1080,7 +1032,19 @@ class TerserPlugin {
    */
   async renderEmbeddedSource(compiler, compilation, variesOn, source, info) {
     const { type, hostType, module } = info;
-    const matched = this.minimizersForType(type);
+    const minimizers = this.minimizers();
+    const matched = [];
+
+    // A minimizer that declares nothing takes no embedded source: such source
+    // carries no filename to guess from, and guessing is what `getTypes`
+    // replaces.
+    for (let i = 0; i < minimizers.length; i++) {
+      const { getTypes } = minimizers[i];
+
+      if (typeof getTypes === "function" && (getTypes() || []).includes(type)) {
+        matched.push(i);
+      }
+    }
 
     if (matched.length === 0) {
       return source;
@@ -1127,7 +1091,21 @@ class TerserPlugin {
           // it at, so comments stay where the minimizer's own defaults keep
           // them.
           extractComments: false,
-          minimizer: this.minimizerFor(matched),
+          minimizer: {
+            implementation:
+              /** @type {MinimizerImplementation<T>} */
+              (/** @type {unknown} */ (matched.map((i) => minimizers[i]))),
+            options:
+              /** @type {MinimizerOptions<T>} */
+              (
+                /** @type {unknown} */
+                (
+                  matched.map((i) =>
+                    getMinimizerOptionsAt(this.options.minimizer.options, i),
+                  )
+                )
+              ),
+          },
           embedded: this.embeddedMinimizer(matched),
           ecma: getEcmaVersion(
             /** @type {NonNullable<NonNullable<import("webpack").Configuration["output"]>["environment"]>} */

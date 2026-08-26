@@ -61,14 +61,6 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private minimizers;
   /**
-   * The minimizers claiming `type`, in configuration order. Source that carries
-   * no filename is dispatched by this rather than by `test` / `filter`.
-   * @private
-   * @param {string} type the language to minify
-   * @returns {number[]} indices into the configured minimizers
-   */
-  private minimizersForType;
-  /**
    * Every configured minimizer and its options, for dispatching source one
    * language embeds in another. The asset's own entry holds only what its
    * filename matched, and a language's minimizer need not be among them — a
@@ -79,13 +71,6 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T>, claims: string[][], offers: string[][], at: number[] } | undefined} every configured minimizer, or undefined when nothing nested could be reached
    */
   private embeddedMinimizer;
-  /**
-   * The minimizer entry one dispatch hands to `minify`.
-   * @private
-   * @param {number[]} matched indices the language dispatched to
-   * @returns {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} the minimizer entry
-   */
-  private minimizerFor;
   /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
