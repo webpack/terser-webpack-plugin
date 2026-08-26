@@ -119,6 +119,47 @@ pageMinify.supportsWorker = () => false;
 pageMinify.supportsWorkerThreads = () => false;
 pageMinify.filter = (name) => /\.page$/i.test(name);
 
+/** @type {EXPECTED_ANY[]} */
+let handed;
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {EXPECTED_ANY} minimizerOptions the options it was handed
+ * @returns {{ code: string }} the body, minified
+ */
+function recordingCssMinify(input, sourceMap, minimizerOptions) {
+  const { renderEmbeddedSource, ...rest } = minimizerOptions || {};
+
+  handed.push(["css", rest]);
+
+  return { code: Object.values(input)[0].replace(/\s+/g, "") };
+}
+
+recordingCssMinify.getTypes = () => ["css"];
+recordingCssMinify.supportsWorker = () => false;
+recordingCssMinify.supportsWorkerThreads = () => false;
+recordingCssMinify.filter = () => false;
+
+/**
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {EXPECTED_ANY} minimizerOptions the options it was handed
+ * @returns {{ code: string }} the body, minified
+ */
+function recordingJsMinify(input, sourceMap, minimizerOptions) {
+  const { renderEmbeddedSource, ...rest } = minimizerOptions || {};
+
+  handed.push(["javascript", rest]);
+
+  return { code: Object.values(input)[0].replace(/\s+/g, " ").trim() };
+}
+
+recordingJsMinify.getTypes = () => ["javascript"];
+recordingJsMinify.supportsWorker = () => false;
+recordingJsMinify.supportsWorkerThreads = () => false;
+recordingJsMinify.filter = () => false;
+
 /**
  * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
  * @returns {{ code: string }} the body, lowercased and trimmed
@@ -216,6 +257,44 @@ describe("embedded sources", () => {
     expect(readAsset("host.page", compiler, stats)).toContain(
       "<style>.a{color:red}</style>",
     );
+  });
+
+  it("hands each nested minimizer its own options, and the target's ecma", async () => {
+    handed = [];
+
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/embedded/entry-page.js"),
+      target: "node",
+      output: {
+        path: path.resolve(__dirname, "helpers/dist"),
+        filename: "[name].js",
+        assetModuleFilename: "[name][ext]",
+      },
+      module: { rules: [{ test: /\.page$/, type: "asset/resource" }] },
+    });
+
+    new MinimizerPlugin({
+      test: /\.page$/i,
+      minify: [pageMinify, recordingCssMinify, recordingJsMinify],
+      minimizerOptions: [
+        {},
+        { cssLevel: 2, dropComments: true },
+        { jsPasses: 3 },
+      ],
+      parallel: false,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    // Each is handed what was configured for it — without that there is no way
+    // to minify a nested body harder, or to turn one of its transforms off.
+    expect(handed).toEqual([
+      ["css", { cssLevel: 2, dropComments: true, ecma: expect.any(Number) }],
+      ["javascript", { jsPasses: 3, ecma: expect.any(Number) }],
+    ]);
+    // What the target can read is the target's, so it reaches the body too.
+    expect(handed[0][1].ecma).toBe(handed[1][1].ecma);
   });
 
   it("keeps a body whose language nothing claims exactly as written", async () => {

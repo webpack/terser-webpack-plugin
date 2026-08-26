@@ -393,6 +393,11 @@ async function minify(options) {
       input: source,
       inputSourceMap: undefined,
       extractComments: false,
+      // What the target can read is the target's, not the asset's, so it carries
+      // into the body too: an inline `<script>` is minified for the same engines
+      // the document is. `module` does not — an inline script is a classic script
+      // whatever the file embedding it is.
+      ecma,
       // The nested minimizers are these indices, so `at` moves with them.
       embedded: { ...embedded, at: matched },
       minimizer: {
