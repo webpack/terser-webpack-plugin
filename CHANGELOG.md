@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.8.0
+
+### Minor Changes
+
+- validate options from webpack's `validate` hook instead of from the constructor, so `validate: false` skips validation, falling back to `schema-utils` on webpack versions without the hook (by [@alexander-akait](https://github.com/alexander-akait) in [#701](https://github.com/webpack/minimizer-webpack-plugin/pull/701))
+
 ## 5.7.0
 
 ### Minor Changes
