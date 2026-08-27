@@ -33,7 +33,7 @@ const RUN_EMBEDDED_TESTS = (() => {
 // string, the same way the embedded-source check is. Named through variables
 // so they are resolved at call time rather than by the import linter.
 const IMAGE_MINIMIZER_PACKAGES = ["sharp", "svgo"];
-const RUN_IMAGE_TESTS = IMAGE_MINIMIZER_PACKAGES.every((name) => {
+const HAS_IMAGE_MINIMIZER_PACKAGES = IMAGE_MINIMIZER_PACKAGES.every((name) => {
   try {
     require(name);
 
@@ -42,6 +42,11 @@ const RUN_IMAGE_TESTS = IMAGE_MINIMIZER_PACKAGES.every((name) => {
     return false;
   }
 });
+// `imageminMinify` loads its ESM-only plugins through `import()`, which jest
+// serves only under `--experimental-vm-modules` — passed by `scripts/jest.js`
+// on the Node versions where it is dependable.
+const HAS_VM_MODULES = process.execArgv.includes("--experimental-vm-modules");
+const RUN_IMAGE_TESTS = HAS_IMAGE_MINIMIZER_PACKAGES && HAS_VM_MODULES;
 
 const testPathIgnorePatterns = [];
 
