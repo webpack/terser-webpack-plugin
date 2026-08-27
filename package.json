@@ -23,11 +23,20 @@
     "compress",
     "compressor",
     "min",
-    "minification",
     "minifier",
     "minify",
     "optimize",
-    "optimizer"
+    "optimizer",
+    "image",
+    "images",
+    "imagemin",
+    "sharp",
+    "svgo",
+    "svg",
+    "png",
+    "jpeg",
+    "webp",
+    "avif"
   ],
   "homepage": "https://github.com/webpack/minimizer-webpack-plugin",
   "bugs": "https://github.com/webpack/minimizer-webpack-plugin/issues",
@@ -61,7 +70,7 @@
     "fix:code": "npm run lint:code -- --fix",
     "fix:prettier": "npm run lint:prettier -- --write",
     "fix": "npm-run-all -l fix:code fix:prettier",
-    "test:base": "jest",
+    "test:base": "node ./scripts/jest.js",
     "test:watch": "npm run test:base -- --watch",
     "test:coverage": "npm run test:base -- --collectCoverageFrom=\"src/**/*.js\" --coverage",
     "pretest": "npm run lint",
@@ -103,8 +112,11 @@
     "eslint": "^10.9.1",
     "eslint-config-webpack": "^4.9.6",
     "file-loader": "^6.2.0",
+    "file-type": "^21.1.0",
     "html-minifier-terser": "^7.2.0",
     "husky": "^9.1.7",
+    "imagemin": "^9.0.1",
+    "imagemin-svgo": "^11.0.1",
     "jest": "^30.4.2",
     "lightningcss": "^1.33.0",
     "lint-staged": "^17.3.0",
@@ -114,6 +126,8 @@
     "prettier": "^3.9.6",
     "prettier-2": "npm:prettier@^2",
     "serialize-javascript": "^7.1.0",
+    "sharp": "^0.34.4",
+    "svgo": "^4.0.0",
     "typescript": "^6.0.3",
     "uglify-js": "^3.19.3",
     "webpack": "^5.109.2",
@@ -151,10 +165,19 @@
     "html-minifier-terser": {
       "optional": true
     },
+    "imagemin": {
+      "optional": true
+    },
     "lightningcss": {
       "optional": true
     },
     "postcss": {
+      "optional": true
+    },
+    "sharp": {
+      "optional": true
+    },
+    "svgo": {
       "optional": true
     },
     "uglify-js": {

@@ -309,7 +309,7 @@ async function minify(options) {
     ? implementation
     : [implementation];
 
-  /** @type {string | undefined} */
+  /** @type {string | Buffer | undefined} */
   let lastCode;
   /** @type {RawSourceMap | undefined} */
   let lastMap;
@@ -460,8 +460,16 @@ async function minify(options) {
     const baseOptions =
       /** @type {import("./index.js").MinimizerOptions<T> & { module?: boolean, ecma?: number | string }} */
       (optionsAt(i));
-    const currentInput = typeof lastCode === "string" ? lastCode : input;
-    const currentMap = typeof lastCode === "string" ? lastMap : inputSourceMap;
+    // A binary minimizer answers with a `Buffer`, so "did the last step
+    // produce something" is not "is it a string".
+    const currentInput =
+      typeof lastCode === "string" || Buffer.isBuffer(lastCode)
+        ? lastCode
+        : input;
+    const currentMap =
+      typeof lastCode === "string" || Buffer.isBuffer(lastCode)
+        ? lastMap
+        : inputSourceMap;
 
     // Overlay `module` and `ecma` without mutating the caller's options so
     // a single options object can be reused safely across assets.
@@ -495,12 +503,14 @@ async function minify(options) {
       extractedComments.push(...result.extractedComments);
     }
 
-    if (typeof result.code === "string") {
+    if (typeof result.code === "string" || Buffer.isBuffer(result.code)) {
       lastCode = result.code;
       // The minimizer's output map is `name → step-output`. Chain it with
       // the previous accumulated map so that across an array of minimizers
-      // the final map points back to the original sources.
-      lastMap = composeSourceMaps(result.map, currentMap, name);
+      // the final map points back to the original sources. Bytes carry none.
+      lastMap = Buffer.isBuffer(result.code)
+        ? undefined
+        : composeSourceMaps(result.map, currentMap, name);
     }
   }
 

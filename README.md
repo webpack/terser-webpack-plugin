@@ -258,7 +258,7 @@ Type:
 
 ```ts
 type minifyFn = (
-  input: Record<string, string>,
+  input: Record<string, string | Buffer>,
   sourceMap: import("@jridgewell/trace-mapping").SourceMapInput | undefined,
   minifyOptions: {
     module?: boolean | undefined;
@@ -1378,6 +1378,199 @@ module.exports = {
         minify: MinimizerPlugin.swcMinifyCss,
         // Options - https://github.com/swc-project/bindings/blob/main/packages/css/index.ts
         minimizerOptions: {},
+      }),
+    ],
+  },
+};
+```
+
+### Images
+
+The plugin can minify image assets too. Pick one of the bundled image
+minimizers and set `test` to match your images.
+
+Available image minimizers:
+
+- `MinimizerPlugin.sharpMinify` — uses [`sharp`](https://github.com/lovell/sharp), re-encoding each image as its own format.
+- `MinimizerPlugin.svgoMinify` — uses [`svgo`](https://github.com/svg/svgo).
+- `MinimizerPlugin.imageminMinify` — uses [`imagemin`](https://github.com/imagemin/imagemin) and the plugins you name.
+
+The image minimizers are optional peer dependencies — install only the ones
+you actually use:
+
+```console
+npm install --save-dev sharp
+# or
+npm install --save-dev svgo
+# or
+npm install --save-dev imagemin imagemin-mozjpeg imagemin-pngquant
+```
+
+> **Note**
+>
+> These minimizers **only minify** — they never change an image's format or
+> name. An asset's name is decided during code generation, long before a
+> minimizer runs, so a renamed asset would leave the bundle pointing at a URL
+> nothing emits. Converting `.png` to `.webp` stays with
+> [`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)
+> and its `generator` option.
+
+> **Note**
+>
+> `sharp` and `imagemin` read the asset's bytes rather than its text, so they
+> run in the webpack process rather than in the worker pool — they do their own
+> threading. Minimizers configured beside them keep the pool.
+
+#### `sharp`
+
+[`sharp`](https://github.com/lovell/sharp) re-encodes each image as the format
+its name already claims, so a `.png` stays a PNG. It handles `avif`, `gif`,
+`heif`, `jp2`, `jpeg`, `png`, `tiff` and `webp`.
+
+**webpack.config.js**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      // Keeps the default Terser plugin for JS files
+      "...",
+      new MinimizerPlugin({
+        test: /\.(png|jpe?g|webp|avif|tiff?|gif)$/i,
+        minify: MinimizerPlugin.sharpMinify,
+        minimizerOptions: {
+          // Options are keyed by sharp's format name
+          // https://sharp.pixelplumbing.com/api-output
+          encodeOptions: {
+            jpeg: { quality: 80 },
+            png: { compressionLevel: 9 },
+            webp: { lossless: true },
+          },
+        },
+      }),
+    ],
+  },
+};
+```
+
+`sharp` can also resize and rotate while it re-encodes:
+
+```js
+new MinimizerPlugin({
+  test: /\.(png|jpe?g)$/i,
+  minify: MinimizerPlugin.sharpMinify,
+  minimizerOptions: {
+    // `unit` is "px" (default) or "percent"
+    resize: { width: 800, unit: "px" },
+    // A number of degrees, or "auto" to follow the EXIF orientation
+    rotate: "auto",
+    encodeOptions: { jpeg: { quality: 80 } },
+  },
+});
+```
+
+#### `svgo`
+
+[`svgo`](https://github.com/svg/svgo) minifies SVG. It also reaches an
+`asset/inline` SVG — one that becomes a `data:` URI rather than a file — which
+carries no asset name for `test` to match; see
+[Embedded source](#embedded-source).
+
+**webpack.config.js**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      "...",
+      new MinimizerPlugin({
+        test: /\.svg(\?.*)?$/i,
+        minify: MinimizerPlugin.svgoMinify,
+        minimizerOptions: {
+          // Options - https://github.com/svg/svgo#configuration
+          encodeOptions: {
+            multipass: true,
+            plugins: ["preset-default"],
+          },
+        },
+      }),
+    ],
+  },
+};
+```
+
+#### `imagemin`
+
+[`imagemin`](https://github.com/imagemin/imagemin) runs the plugins you name.
+Each is a string — `"mozjpeg"` resolves `imagemin-mozjpeg` — or a
+`[name, options]` pair. Install each plugin yourself.
+
+**webpack.config.js**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      "...",
+      new MinimizerPlugin({
+        test: /\.(png|jpe?g|gif|svg)$/i,
+        minify: MinimizerPlugin.imageminMinify,
+        minimizerOptions: {
+          plugins: [
+            "gifsicle",
+            "mozjpeg",
+            ["pngquant", { quality: [0.6, 0.8] }],
+            "svgo",
+          ],
+        },
+      }),
+    ],
+  },
+};
+```
+
+> **Note**
+>
+> A plugin that converts — `imagemin-webp`, `imagemin-avif` — writes a format
+> the asset's name does not claim. `imageminMinify` keeps the original and
+> warns instead of writing it, since it cannot rename the asset.
+
+#### Images beside everything else
+
+`minify` takes an array, and each minimizer is offered only the assets its own
+`filter` accepts, so one plugin instance can cover several languages at once:
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        test: /\.(js|css|svg|png|jpe?g)$/i,
+        minify: [
+          MinimizerPlugin.terserMinify,
+          MinimizerPlugin.cssnanoMinify,
+          MinimizerPlugin.svgoMinify,
+          MinimizerPlugin.sharpMinify,
+        ],
+        // One entry per minimizer, in the same order
+        minimizerOptions: [
+          {},
+          {},
+          {},
+          { encodeOptions: { png: { compressionLevel: 9 } } },
+        ],
       }),
     ],
   },

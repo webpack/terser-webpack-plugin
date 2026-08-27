@@ -27,6 +27,22 @@ const RUN_EMBEDDED_TESTS = (() => {
   }
 })();
 
+// The image minimizers reach for packages the legacy rows never get: `sharp`
+// ships a native binary that the `--ignore-scripts` installs skip, and
+// `imagemin` is ESM-only. Asked of the packages rather than of the version
+// string, the same way the embedded-source check is. Named through variables
+// so they are resolved at call time rather than by the import linter.
+const IMAGE_MINIMIZER_PACKAGES = ["sharp", "svgo"];
+const RUN_IMAGE_TESTS = IMAGE_MINIMIZER_PACKAGES.every((name) => {
+  try {
+    require(name);
+
+    return true;
+  } catch (_err) {
+    return false;
+  }
+});
+
 const testPathIgnorePatterns = [];
 
 if (!RUN_CSS_TESTS) {
@@ -39,6 +55,10 @@ if (!RUN_SWC_HTML_TESTS) {
 
 if (!RUN_EMBEDDED_TESTS) {
   testPathIgnorePatterns.push("/test/embedded-source\\.test\\.js$");
+}
+
+if (!RUN_IMAGE_TESTS) {
+  testPathIgnorePatterns.push("/test/image-minify-option\\.test\\.js$");
 }
 
 module.exports = {

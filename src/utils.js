@@ -29,6 +29,35 @@ const JS_FILE_RE = /\.[cm]?js(\?.*)?$/i;
 const JSON_FILE_RE = /\.json(\?.*)?$/i;
 const HTML_FILE_RE = /\.html?(\?.*)?$/i;
 const CSS_FILE_RE = /\.css(\?.*)?$/i;
+const SVG_FILE_RE = /\.svg(\?.*)?$/i;
+// What `imageminMinify` is offered; its plugins decide what they act on.
+const IMAGE_FILE_RE = /\.(?:avif|gif|jpe?g|jxl|png|svg|tiff?|webp)(\?.*)?$/i;
+
+/** @type {undefined | ((specifier: string) => Promise<EXPECTED_ANY>)} */
+let dynamicImport;
+
+/**
+ * `imagemin` and its plugins are ESM-only, so they are reached through
+ * `import()` — built here rather than written inline so the CommonJS build does
+ * not compile it to a `require` that cannot load them, and so this file still
+ * parses on the Node versions that predate it. Nothing but `imageminMinify`
+ * calls this.
+ * @returns {(specifier: string) => Promise<EXPECTED_ANY>} the importer
+ */
+function getDynamicImport() {
+  if (dynamicImport) {
+    return dynamicImport;
+  }
+
+  // eslint-disable-next-line no-new-func
+  const importer = new Function("specifier", "return import(specifier)");
+
+  dynamicImport =
+    /** @type {(specifier: string) => Promise<EXPECTED_ANY>} */
+    (importer);
+
+  return dynamicImport;
+}
 
 /**
  * Map a webpack `output.environment` configuration to the highest
@@ -347,7 +376,8 @@ async function terserMinify(
     }
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const result = await minify({ [filename]: code }, terserOptions);
 
   return {
@@ -592,7 +622,8 @@ async function uglifyJsMinify(
     extractedComments,
   );
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const result = await minify({ [filename]: code }, uglifyJsOptions);
 
   return {
@@ -825,7 +856,8 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
     }
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const result =
     /** @type {import("@swc/core").Output & { extractedComments?: string[] }} */
     (await swc.minify(code, swcOptions));
@@ -928,7 +960,8 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
     esbuildOptions.sourcesContent = false;
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
 
   esbuildOptions.sourcefile = filename;
 
@@ -1021,7 +1054,8 @@ async function jsonMinify(input, sourceMap, minimizerOptions) {
     /** @type {{ replacer?: Parameters<typeof JSON.stringify>[1], space?: Parameters<typeof JSON.stringify>[2] }} */
     (minimizerOptions);
 
-  const [[, code]] = Object.entries(input);
+  const [[, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const result = JSON.stringify(
     JSON.parse(code),
     options.replacer,
@@ -1065,7 +1099,8 @@ async function htmlMinifierTerser(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[, code]] = Object.entries(input);
+  const [[, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   /** @type {import("html-minifier-terser").Options} */
   const defaultMinimizerOptions = {
     caseSensitive: true,
@@ -1144,7 +1179,8 @@ async function minifyHtmlNode(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[, code]] = Object.entries(input);
+  const [[, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const options =
     /** @type {Parameters<import("@minify-html/node").minify>[1]} */ ({
       ...minimizerOptions,
@@ -1223,7 +1259,8 @@ async function swcMinifyHtml(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[, code]] = Object.entries(input);
+  const [[, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const options = /** @type {import("@swc/html").Options} */ ({
     ...minimizerOptions,
   });
@@ -1290,7 +1327,8 @@ async function swcMinifyHtmlFragment(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[, code]] = Object.entries(input);
+  const [[, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const options = /** @type {import("@swc/html").FragmentOptions} */ ({
     ...minimizerOptions,
   });
@@ -1400,7 +1438,8 @@ async function cssnanoMinify(
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[name, code]] = Object.entries(input);
+  const [[name, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   /** @type {import("postcss").ProcessOptions} */
   const postcssOptions = {
     from: name,
@@ -1517,7 +1556,8 @@ async function cssoMinify(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const result = csso.minify(code, {
     filename,
     sourceMap: Boolean(sourceMap),
@@ -1584,7 +1624,8 @@ async function cleanCssMinify(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[name, code]] = Object.entries(input);
+  const [[name, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   const result = await new CleanCSS({
     sourceMap: Boolean(sourceMap),
     ...minimizerOptions,
@@ -1699,7 +1740,8 @@ async function esbuildMinifyCss(input, sourceMap, minimizerOptions) {
     esbuildOptions.sourcesContent = false;
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
 
   esbuildOptions.sourcefile = filename;
 
@@ -1797,7 +1839,8 @@ async function lightningCssMinify(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   /**
    * @param {Partial<import("lightningcss").TransformOptions<import("lightningcss").CustomAtRules>>=} lightningCssOptions lightning css options
    * @returns {import("lightningcss").TransformOptions<import("lightningcss").CustomAtRules>} built lightning css options
@@ -1898,7 +1941,8 @@ async function swcMinifyCss(input, sourceMap, minimizerOptions) {
     return { errors: [/** @type {Error} */ (err)] };
   }
 
-  const [[filename, code]] = Object.entries(input);
+  const [[filename, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
   /**
    * @param {Partial<import("@swc/css").MinifyOptions>=} swcOptions swc options
    * @returns {import("@swc/css").MinifyOptions} built swc options
@@ -1960,6 +2004,372 @@ swcMinifyCss.getTypes = () => ["css"];
 swcMinifyCss.filter = (name) => CSS_FILE_RE.test(name);
 
 /**
+ * The extension a name carries, lowercased and without the dot or any query.
+ * @param {string} name asset name
+ * @returns {string} the extension, or "" when it has none
+ */
+function extensionOf(name) {
+  const withoutQuery = name.replace(/\?.*$/, "");
+  const dotIndex = withoutQuery.lastIndexOf(".");
+  const slashIndex = Math.max(
+    withoutQuery.lastIndexOf("/"),
+    withoutQuery.lastIndexOf("\\"),
+  );
+
+  return dotIndex > slashIndex
+    ? withoutQuery.slice(dotIndex + 1).toLowerCase()
+    : "";
+}
+
+/**
+ * The bytes of what a binary minimizer was handed. Its source may reach it as
+ * text when the asset was built as one, so this is the one place that decides.
+ *
+ * Only reachable from a minimizer that declares `supportsWorker` false: every
+ * other one is serialized to source and re-evaluated in a worker, where nothing
+ * this module defines exists.
+ * @param {string | Buffer} code the input
+ * @returns {Buffer} its bytes
+ */
+function toBuffer(code) {
+  return Buffer.isBuffer(code) ? code : Buffer.from(code);
+}
+
+/**
+ * Which sharp format each extension names. Minifying re-encodes a file as
+ * itself, so this is both the set sharp is offered and the format it writes.
+ * @type {Map<string, string>}
+ */
+const SHARP_MINIFY_FORMATS = new Map([
+  ["avif", "avif"],
+  ["gif", "gif"],
+  ["heic", "heif"],
+  ["heif", "heif"],
+  ["j2c", "jp2"],
+  ["j2k", "jp2"],
+  ["jp2", "jp2"],
+  ["jpeg", "jpeg"],
+  ["jpg", "jpeg"],
+  ["jpx", "jp2"],
+  ["png", "png"],
+  ["raw", "raw"],
+  ["tif", "tiff"],
+  ["tiff", "tiff"],
+  ["webp", "webp"],
+]);
+
+/* istanbul ignore next */
+/**
+ * Minify an image using `sharp`, re-encoding it as its own format.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+async function sharpMinify(input, sourceMap, minimizerOptions) {
+  /**
+   * @typedef {object} SharpMinifyOptions
+   * @property {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean }=} resize resize the image before re-encoding it
+   * @property {number | "auto"=} rotate rotate by an angle, or by what the EXIF orientation says
+   * @property {{ [format: string]: EXPECTED_OBJECT }=} encodeOptions per-format options, keyed by sharp's format name
+   */
+  const [[name, code]] = Object.entries(input);
+  const format = SHARP_MINIFY_FORMATS.get(extensionOf(name));
+
+  // `filter` offers only what this map holds, so a name reaching here without
+  // one came from a caller that dispatched by something else.
+  if (typeof format === "undefined") {
+    return { code };
+  }
+
+  const options = /** @type {SharpMinifyOptions} */ (minimizerOptions || {});
+
+  /** @type {import("sharp")} */
+
+  const sharp = require("sharp");
+
+  const pipeline = sharp(toBuffer(code), { animated: true });
+
+  if (typeof options.rotate === "number") {
+    pipeline.rotate(options.rotate);
+  } else if (options.rotate === "auto") {
+    pipeline.rotate();
+  }
+
+  if (options.resize) {
+    const { enabled = true, unit = "px", ...params } = options.resize;
+
+    if (
+      enabled &&
+      (typeof params.width === "number" || typeof params.height === "number")
+    ) {
+      if (unit === "percent") {
+        const { width, height } = await pipeline.metadata();
+
+        if (typeof params.width === "number" && width) {
+          params.width = Math.ceil((width * params.width) / 100);
+        }
+
+        if (typeof params.height === "number" && height) {
+          params.height = Math.ceil((height * params.height) / 100);
+        }
+      }
+
+      pipeline.resize(params);
+    }
+  }
+
+  pipeline.toFormat(
+    /** @type {EXPECTED_ANY} */ (format),
+    options.encodeOptions && options.encodeOptions[format],
+  );
+
+  return { code: await pipeline.toBuffer() };
+}
+
+/**
+ * @returns {string | undefined} the minimizer version
+ */
+sharpMinify.getMinimizerVersion = () => {
+  let packageJson;
+
+  try {
+    packageJson = require("sharp/package.json");
+  } catch (_err) {
+    // Ignore
+  }
+
+  return packageJson && packageJson.version;
+};
+
+/**
+ * The asset reaches this one as bytes rather than as text.
+ * @returns {boolean} true, images are binary
+ */
+sharpMinify.supportsBinary = () => true;
+
+/**
+ * sharp runs its own thread pool over native code, and its input cannot cross
+ * the worker boundary as text, so it stays in process.
+ * @returns {boolean} false
+ */
+sharpMinify.supportsWorker = () => false;
+
+/**
+ * @returns {boolean} false
+ */
+sharpMinify.supportsWorkerThreads = () => false;
+
+/**
+ * @param {string} name asset name
+ * @returns {boolean} true if sharp can re-encode `name` as its own format
+ */
+sharpMinify.filter = (name) => SHARP_MINIFY_FORMATS.has(extensionOf(name));
+
+/**
+ * Resolve the `plugins` entry of an `imagemin` configuration to the plugin
+ * functions it names, importing each one.
+ * @param {EXPECTED_OBJECT=} imageminConfig imagemin configuration
+ * @returns {Promise<EXPECTED_OBJECT>} the configuration with resolved plugins
+ */
+async function imageminNormalizeConfig(imageminConfig) {
+  const config =
+    /** @type {{ plugins?: (string | [string, EXPECTED_OBJECT])[] }} */
+    (imageminConfig || {});
+
+  if (!config.plugins || config.plugins.length === 0) {
+    throw new Error(
+      "No plugins found for `imagemin`, please read documentation",
+    );
+  }
+
+  const plugins = [];
+
+  for (const plugin of config.plugins) {
+    const isPluginArray = Array.isArray(plugin);
+    const pluginName = isPluginArray ? plugin[0] : plugin;
+
+    if (typeof pluginName !== "string") {
+      throw new Error(
+        `Invalid plugin configuration '${JSON.stringify(
+          plugin,
+        )}', plugin configuration should be 'string' or '[string, object]'`,
+      );
+    }
+
+    const pluginOptions = isPluginArray ? plugin[1] : undefined;
+    const prefixed = pluginName.startsWith("imagemin")
+      ? pluginName
+      : `imagemin-${pluginName}`;
+    let requiredPlugin;
+
+    const load = getDynamicImport();
+
+    try {
+      requiredPlugin = (await load(prefixed)).default(pluginOptions);
+    } catch (_err) {
+      try {
+        requiredPlugin = (await load(pluginName)).default(pluginOptions);
+      } catch (error) {
+        throw new Error(
+          `Unknown plugin: ${prefixed}\n\nDid you forget to install the plugin?\nYou can install it with:\n\n$ npm install ${prefixed} --save-dev\n$ yarn add ${prefixed} --dev`,
+          { cause: error },
+        );
+      }
+    }
+
+    plugins.push(requiredPlugin);
+  }
+
+  return { ...config, plugins };
+}
+
+/* istanbul ignore next */
+/**
+ * Minify an image using `imagemin` and the plugins named in the options.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+async function imageminMinify(input, sourceMap, minimizerOptions) {
+  const [[name, code]] = Object.entries(input);
+  const normalized = await imageminNormalizeConfig(minimizerOptions);
+  const imagemin = (await getDynamicImport()("imagemin")).default;
+  const result = await imagemin.buffer(
+    toBuffer(code),
+    /** @type {EXPECTED_ANY} */ (normalized),
+  );
+  // imagemin@8 answers with a Buffer, imagemin@9 with a Uint8Array.
+  const minified = Buffer.isBuffer(result) ? result : Buffer.from(result);
+  const inputExtension = extensionOf(name);
+
+  const { ext: outputExtension } =
+    require("./fileType.js").fileTypeFromBuffer(minified) || {};
+
+  // A plugin that converted the image wrote a format this asset's name does not
+  // claim. Nothing here can rename the asset, so the original is kept.
+  if (
+    inputExtension &&
+    outputExtension &&
+    inputExtension !== outputExtension &&
+    !(inputExtension === "jpeg" && outputExtension === "jpg") &&
+    !(inputExtension === "tif" && outputExtension === "tiff")
+  ) {
+    return {
+      code,
+      warnings: [
+        `"imageminMinify" does not support generating "${outputExtension}" from "${name}", the original was kept`,
+      ],
+    };
+  }
+
+  return { code: minified };
+}
+
+/**
+ * @returns {string | undefined} the minimizer version
+ */
+imageminMinify.getMinimizerVersion = () => {
+  let packageJson;
+
+  try {
+    packageJson = require("imagemin/package.json");
+  } catch (_err) {
+    // Ignore
+  }
+
+  return packageJson && packageJson.version;
+};
+
+/**
+ * The asset reaches this one as bytes rather than as text.
+ * @returns {boolean} true, images are binary
+ */
+imageminMinify.supportsBinary = () => true;
+
+/**
+ * Its plugins shell out to native binaries of their own, and its input cannot
+ * cross the worker boundary as text, so it stays in process.
+ * @returns {boolean} false
+ */
+imageminMinify.supportsWorker = () => false;
+
+/**
+ * @returns {boolean} false
+ */
+imageminMinify.supportsWorkerThreads = () => false;
+
+/**
+ * @param {string} name asset name
+ * @returns {boolean} true if `name` looks like an image
+ */
+imageminMinify.filter = (name) => IMAGE_FILE_RE.test(name);
+
+/* istanbul ignore next */
+/**
+ * Minify an SVG using `svgo`.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for SVG)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+async function svgoMinify(input, sourceMap, minimizerOptions) {
+  /**
+   * @typedef {object} SvgoMinifyOptions
+   * @property {Omit<import("svgo").Config, "path" | "datauri">=} encodeOptions options handed to `svgo`
+   */
+  const [[name, source]] = Object.entries(input);
+  const code = Buffer.isBuffer(source) ? source.toString() : source;
+  const { encodeOptions } = /** @type {SvgoMinifyOptions} */ (
+    minimizerOptions || {}
+  );
+
+  /** @type {import("svgo")} */
+  // eslint-disable-next-line import/no-unresolved
+  const { optimize } = require("svgo");
+
+  const result = optimize(code, { path: name, ...encodeOptions });
+
+  return { code: result.data };
+}
+
+/**
+ * @returns {string | undefined} the minimizer version
+ */
+svgoMinify.getMinimizerVersion = () => {
+  let svgo;
+
+  try {
+    // `svgo` states its own version; its `package.json` is not an export.
+    // eslint-disable-next-line import/no-unresolved
+    svgo = require("svgo");
+  } catch (_err) {
+    // Ignore
+  }
+
+  return svgo && svgo.VERSION;
+};
+
+/**
+ * @returns {boolean} true
+ */
+svgoMinify.supportsWorkerThreads = () => true;
+
+/**
+ * The language this minifies, for a caller dispatching source that carries
+ * no filename of its own — an `asset/inline` SVG reaches this and no asset.
+ * @returns {string[]} the languages
+ */
+svgoMinify.getTypes = () => ["svg"];
+
+/**
+ * @param {string} name asset name
+ * @returns {boolean} true if `name` looks like an SVG file
+ */
+svgoMinify.filter = (name) => SVG_FILE_RE.test(name);
+
+/**
  * @template T
  * @typedef {() => T} FunctionReturning
  */
@@ -1997,10 +2407,14 @@ module.exports = {
   getEcmaVersion,
   getMinimizerOptionsAt,
   htmlMinifierTerser,
+  imageminMinify,
+  imageminNormalizeConfig,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
+  sharpMinify,
+  svgoMinify,
   swcMinify,
   swcMinifyCss,
   swcMinifyHtml,
