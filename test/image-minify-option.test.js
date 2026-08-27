@@ -161,6 +161,71 @@ describe("image minify option", () => {
     );
   });
 
+  it("should accept an `imagemin` plugin as a `[name, options]` pair", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({
+      test: /\.svg$/i,
+      minify: MinimizerPlugin.imageminMinify,
+      minimizerOptions: {
+        plugins: [["svgo", { plugins: [{ name: "preset-default" }] }]],
+      },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toEqual([]);
+    expect(readBytes(compiler, stats, "image.svg").toString()).not.toContain(
+      "a comment svgo removes",
+    );
+  });
+
+  it("should keep the original when an `imagemin` plugin changes the format", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    /** @type {Buffer | undefined} */
+    let handed;
+    // Stands in for a converting plugin: the PNG's bytes are offered under a
+    // name claiming another format, which is the mismatch `imageminMinify`
+    // refuses. Kept out of the worker pool so it can reach this closure.
+    const asMismatchedName = async (input) => {
+      const [[, code]] = Object.entries(input);
+
+      handed = code;
+
+      return MinimizerPlugin.imageminMinify({ "image.jpg": code }, undefined, {
+        plugins: ["svgo"],
+      });
+    };
+
+    asMismatchedName.supportsBinary = () => true;
+    asMismatchedName.supportsWorker = () => false;
+
+    new MinimizerPlugin({
+      test: /\.png$/i,
+      minify: asMismatchedName,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    // The bytes reached it as bytes, not as text.
+    expect(Buffer.isBuffer(handed)).toBe(true);
+    expect(getWarnings(stats).join("\n")).toContain(
+      'does not support generating "png" from "image.jpg"',
+    );
+    expect(readBytes(compiler, stats, "image.png")).toHaveLength(
+      fixtureSize("image.png"),
+    );
+  });
+
   it("should throw when `imageminMinify` has no plugins", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/images.js"),

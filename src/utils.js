@@ -2177,7 +2177,7 @@ async function imageminNormalizeConfig(imageminConfig) {
     /** @type {{ plugins?: (string | [string, EXPECTED_OBJECT])[] }} */
     (imageminConfig || {});
 
-  if (!config.plugins || config.plugins.length === 0) {
+  if (!Array.isArray(config.plugins) || config.plugins.length === 0) {
     throw new Error(
       "No plugins found for `imagemin`, please read documentation",
     );
@@ -2242,20 +2242,16 @@ async function imageminMinify(input, sourceMap, minimizerOptions) {
   );
   // imagemin@8 answers with a Buffer, imagemin@9 with a Uint8Array.
   const minified = Buffer.isBuffer(result) ? result : Buffer.from(result);
-  const inputExtension = extensionOf(name);
 
-  const { ext: outputExtension } =
-    require("./fileType.js").fileTypeFromBuffer(minified) || {};
+  const { canonicalExtension, fileTypeFromBuffer } = require("./fileType.js");
+
+  const inputExtension = canonicalExtension(extensionOf(name));
+  const detected = fileTypeFromBuffer(minified);
+  const outputExtension = detected && canonicalExtension(detected.ext);
 
   // A plugin that converted the image wrote a format this asset's name does not
   // claim. Nothing here can rename the asset, so the original is kept.
-  if (
-    inputExtension &&
-    outputExtension &&
-    inputExtension !== outputExtension &&
-    !(inputExtension === "jpeg" && outputExtension === "jpg") &&
-    !(inputExtension === "tif" && outputExtension === "tiff")
-  ) {
+  if (inputExtension && outputExtension && inputExtension !== outputExtension) {
     return {
       code,
       warnings: [
