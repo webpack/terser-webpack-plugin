@@ -945,13 +945,25 @@ class TerserPlugin {
        * @returns {Promise<ExtractedCommentsInfoWithFrom>} extract comments with info
        */
       async (previousPromise, [from, value]) => {
-        const previous =
+        let previous =
           /** @type {ExtractedCommentsInfoWithFrom | undefined} * */ (
             await previousPromise
           );
         const { commentsFilename, extractedCommentsSource } = value;
 
-        if (previous && previous.commentsFilename === commentsFilename) {
+        if (!previous || previous.commentsFilename !== commentsFilename) {
+          const existingAsset = compilation.getAsset(commentsFilename);
+
+          previous = existingAsset
+            ? {
+                source: existingAsset.source,
+                commentsFilename,
+                from: commentsFilename,
+              }
+            : undefined;
+        }
+
+        if (previous) {
           const { from: previousFrom, source: prevSource } = previous;
           const mergedName = `${previousFrom}|${from}`;
           const name = `${commentsFilename}|${mergedName}`;
@@ -981,16 +993,6 @@ class TerserPlugin {
           compilation.updateAsset(commentsFilename, source);
 
           return { source, commentsFilename, from: mergedName };
-        }
-
-        const existingAsset = compilation.getAsset(commentsFilename);
-
-        if (existingAsset) {
-          return {
-            source: existingAsset.source,
-            commentsFilename,
-            from: commentsFilename,
-          };
         }
 
         compilation.emitAsset(commentsFilename, extractedCommentsSource, {
