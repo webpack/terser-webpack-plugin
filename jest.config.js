@@ -42,11 +42,15 @@ const HAS_IMAGE_MINIMIZER_PACKAGES = IMAGE_MINIMIZER_PACKAGES.every((name) => {
     return false;
   }
 });
-// `imageminMinify` loads its ESM-only plugins through `import()`, which jest
-// serves only under `--experimental-vm-modules` — passed by `scripts/jest.js`
-// on the Node versions where it is dependable.
-const HAS_VM_MODULES = process.execArgv.includes("--experimental-vm-modules");
-const RUN_IMAGE_TESTS = HAS_IMAGE_MINIMIZER_PACKAGES && HAS_VM_MODULES;
+// `imagemin` is ESM-only, so anything reaching it goes through an `import()`
+// inside a jest VM context. On Node 14 that takes the worker process down with
+// a SIGSEGV instead of throwing — with the flag or without it — so the suites
+// that reach it run only where `scripts/jest.js` turns VM modules on, which is
+// also the first Node `imagemin` itself supports.
+const RUN_ESM_IMPORT_TESTS = process.execArgv.includes(
+  "--experimental-vm-modules",
+);
+const RUN_IMAGE_TESTS = HAS_IMAGE_MINIMIZER_PACKAGES && RUN_ESM_IMPORT_TESTS;
 
 const testPathIgnorePatterns = [];
 
@@ -64,6 +68,10 @@ if (!RUN_EMBEDDED_TESTS) {
 
 if (!RUN_IMAGE_TESTS) {
   testPathIgnorePatterns.push("/test/image-minify-option\\.test\\.js$");
+}
+
+if (!RUN_ESM_IMPORT_TESTS) {
+  testPathIgnorePatterns.push("/test/imagemin-normalize-config\\.test\\.js$");
 }
 
 module.exports = {
