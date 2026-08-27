@@ -1,6 +1,6 @@
 {
   "name": "minimizer-webpack-plugin",
-  "version": "5.7.0",
+  "version": "5.8.0",
   "description": "Minimizer plugin for webpack",
   "keywords": [
     "uglify",
