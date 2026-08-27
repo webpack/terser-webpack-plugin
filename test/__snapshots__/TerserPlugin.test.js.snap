@@ -491,6 +491,8 @@ exports[`MinimizerPlugin should work in multi compiler mode with the one plugin:
 exports[`MinimizerPlugin should work in multi compiler mode with the one plugin: compiler plugin count 1`] = `
 {
   "compilation": 1,
+  "initialize": 1,
+  "validate": 1,
 }
 `;
 
@@ -580,6 +582,8 @@ exports[`MinimizerPlugin should work in multi compiler mode: assets 3`] = `
 exports[`MinimizerPlugin should work in multi compiler mode: compiler plugin count 1`] = `
 {
   "compilation": 1,
+  "initialize": 1,
+  "validate": 1,
 }
 `;
 

@@ -1,168 +1,176 @@
 import MinimizerPlugin from "../src";
 
+import { getCompiler } from "./helpers";
+
+/**
+ * @param {EXPECTED_ANY} options plugin options
+ * @returns {import("webpack").Compiler} compiler
+ */
+const createCompiler = (options) =>
+  getCompiler({ plugins: [new MinimizerPlugin(options)] });
+
 describe("validation", () => {
   it("validate", () => {
-    /* eslint-disable no-new */
     expect(() => {
-      new MinimizerPlugin({ test: /foo/ });
+      createCompiler({ test: /foo/ });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ test: "foo" });
+      createCompiler({ test: "foo" });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ test: [/foo/] });
+      createCompiler({ test: [/foo/] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ test: [/foo/, /bar/] });
+      createCompiler({ test: [/foo/, /bar/] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ test: ["foo", "bar"] });
+      createCompiler({ test: ["foo", "bar"] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ test: [/foo/, "bar"] });
+      createCompiler({ test: [/foo/, "bar"] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ test: true });
+      createCompiler({ test: true });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ test: [true] });
+      createCompiler({ test: [true] });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ include: /foo/ });
+      createCompiler({ include: /foo/ });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ include: "foo" });
+      createCompiler({ include: "foo" });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ include: [/foo/] });
+      createCompiler({ include: [/foo/] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ include: [/foo/, /bar/] });
+      createCompiler({ include: [/foo/, /bar/] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ include: ["foo", "bar"] });
+      createCompiler({ include: ["foo", "bar"] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ include: [/foo/, "bar"] });
+      createCompiler({ include: [/foo/, "bar"] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ include: true });
+      createCompiler({ include: true });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ include: [true] });
+      createCompiler({ include: [true] });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: /foo/ });
+      createCompiler({ exclude: /foo/ });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: "foo" });
+      createCompiler({ exclude: "foo" });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: [/foo/] });
+      createCompiler({ exclude: [/foo/] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: [/foo/, /bar/] });
+      createCompiler({ exclude: [/foo/, /bar/] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: ["foo", "bar"] });
+      createCompiler({ exclude: ["foo", "bar"] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: [/foo/, "bar"] });
+      createCompiler({ exclude: [/foo/, "bar"] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: true });
+      createCompiler({ exclude: true });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ exclude: [true] });
+      createCompiler({ exclude: [true] });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ parallel: true });
+      createCompiler({ parallel: true });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ parallel: false });
+      createCompiler({ parallel: false });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ parallel: 2 });
+      createCompiler({ parallel: 2 });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ parallel: "2" });
+      createCompiler({ parallel: "2" });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ parallel: {} });
+      createCompiler({ parallel: {} });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ minify() {} });
+      createCompiler({ minify() {} });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ minify: [() => ({ code: "" })] });
+      createCompiler({ minify: [() => ({ code: "" })] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         minify: [() => ({ code: "" }), () => ({ code: "" })],
       });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ minify: [] });
+      createCompiler({ minify: [] });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ minify: true });
+      createCompiler({ minify: true });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ terserOptions: {} });
+      createCompiler({ terserOptions: {} });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ terserOptions: [{}] });
+      createCompiler({ terserOptions: [{}] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ terserOptions: [{}, {}] });
+      createCompiler({ terserOptions: [{}, {}] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ terserOptions: [] });
+      createCompiler({ terserOptions: [] });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ terserOptions: null });
+      createCompiler({ terserOptions: null });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         terserOptions: {
           ecma: undefined,
           parse: {},
@@ -181,31 +189,31 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ terserOptions: { emca: 5 } });
+      createCompiler({ terserOptions: { emca: 5 } });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ extractComments: true });
+      createCompiler({ extractComments: true });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ extractComments: false });
+      createCompiler({ extractComments: false });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ extractComments: "comment" });
+      createCompiler({ extractComments: "comment" });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ extractComments: /comment/ });
+      createCompiler({ extractComments: /comment/ });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ extractComments() {} });
+      createCompiler({ extractComments() {} });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           condition: true,
         },
@@ -213,7 +221,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           condition: "comment",
         },
@@ -221,7 +229,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           condition: /comment/,
         },
@@ -229,7 +237,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           condition() {},
         },
@@ -237,7 +245,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           condition: {},
         },
@@ -245,7 +253,7 @@ describe("validation", () => {
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           filename: "test.js",
         },
@@ -253,7 +261,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           filename() {},
         },
@@ -261,7 +269,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           filename: true,
         },
@@ -269,7 +277,7 @@ describe("validation", () => {
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           banner: true,
         },
@@ -277,7 +285,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           banner: "banner",
         },
@@ -285,7 +293,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           banner() {},
         },
@@ -293,7 +301,7 @@ describe("validation", () => {
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         extractComments: {
           banner: /test/,
         },
@@ -301,39 +309,58 @@ describe("validation", () => {
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ extractComments: { unknown: true } });
+      createCompiler({ extractComments: { unknown: true } });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ unknown: true });
+      createCompiler({ unknown: true });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ minimizerOptions: {} });
+      createCompiler({ minimizerOptions: {} });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ minimizerOptions: [{}] });
+      createCompiler({ minimizerOptions: [{}] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ minimizerOptions: [{}, {}] });
+      createCompiler({ minimizerOptions: [{}, {}] });
     }).not.toThrow();
 
     expect(() => {
-      new MinimizerPlugin({ minimizerOptions: [] });
+      createCompiler({ minimizerOptions: [] });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({ minimizerOptions: null });
+      createCompiler({ minimizerOptions: null });
     }).toThrowErrorMatchingSnapshot();
 
     expect(() => {
-      new MinimizerPlugin({
+      createCompiler({
         minimizerOptions: { ecma: 5 },
         terserOptions: { ecma: 5 },
       });
     }).not.toThrow();
   });
+
+  it("should validate a minimizer added through `optimization.minimizer`", () => {
+    expect(() => {
+      getCompiler({
+        optimization: {
+          minimize: true,
+          minimizer: [new MinimizerPlugin({ unknown: true })],
+        },
+      });
+    }).toThrowErrorMatchingSnapshot();
+
+    expect(() => {
+      getCompiler({
+        optimization: {
+          minimize: true,
+          minimizer: [new MinimizerPlugin({ parallel: 2 })],
+        },
+      });
+    }).not.toThrow();
+  });
 });
-/* eslint-enable no-new */

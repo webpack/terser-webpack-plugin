@@ -40,6 +40,11 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
   );
   /**
    * @private
+   * @type {BasePluginOptions & DefinedDefaultMinimizerAndOptions<T>}
+   */
+  private rawOptions;
+  /**
+   * @private
    * @type {InternalPluginOptions<T>}
    */
   private options;
@@ -85,6 +90,13 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @returns {Promise<import("webpack").sources.Source>} the minified source, or the original
    */
   private renderEmbeddedSource;
+  /**
+   * Validates the options the plugin was constructed with.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @returns {void}
+   */
+  private validateOptions;
   /**
    * @param {Compiler} compiler compiler
    * @returns {void}
