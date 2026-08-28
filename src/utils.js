@@ -2312,6 +2312,10 @@ function toBuffer(code) {
 /**
  * Which sharp format each extension names. Minifying re-encodes a file as
  * itself, so this is both the set sharp is offered and the format it writes.
+ *
+ * `raw` is not among them though sharp writes it: bare pixels carry no header,
+ * so sharp cannot read one back without being told its width and height, which
+ * a minimizer handed only bytes has no way to know.
  * @type {Map<string, string>}
  */
 const SHARP_MINIFY_FORMATS = new Map([
@@ -2326,7 +2330,6 @@ const SHARP_MINIFY_FORMATS = new Map([
   ["jpg", "jpeg"],
   ["jpx", "jp2"],
   ["png", "png"],
-  ["raw", "raw"],
   ["tif", "tiff"],
   ["tiff", "tiff"],
   ["webp", "webp"],
@@ -2765,14 +2768,27 @@ async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
     (operation) => pipeline[operation],
   );
   const blurs = typeof pipeline.blur === "number";
+  const bytes = toBuffer(code);
+  /** @type {EXPECTED_OBJECT | undefined} */
+  let metadata;
+
+  /**
+   * The header, read at most once for the two questions below that need it.
+   * Asked with its EXIF, which is the only way `orientation` comes back.
+   * @returns {Promise<EXPECTED_ANY>} what the header says
+   */
+  const readMetadata = async () => {
+    metadata = metadata || (await new image.Transformer(bytes).metadata(true));
+
+    return metadata;
+  };
+
   // Decoding and encoding again costs some twenty times what reading the
   // header does, so an image whose EXIF asks for nothing keeps the fast path
   // rather than paying for a turn it does not need — which is what
   // `rotate: "auto"` set for every image would otherwise cost most of them.
   if (turnsByExif && typeof orientation === "undefined") {
-    const { orientation: exif } = await new image.Transformer(
-      toBuffer(code),
-    ).metadata(true);
+    const { orientation: exif } = await readMetadata();
 
     turnsByExif = typeof exif === "number" && exif > 1;
   }
@@ -2788,9 +2804,7 @@ async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
     typeof resize.width !== "number" &&
     typeof askedHeight === "number"
   ) {
-    const { width, height } = await new image.Transformer(
-      toBuffer(code),
-    ).metadata();
+    const { width, height } = await readMetadata();
 
     sizing = {
       ...resize,
@@ -2845,18 +2859,18 @@ async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
     return transformer;
   };
 
-  let bytes = toBuffer(code);
+  let written = bytes;
 
   if (encoder.repack) {
     if (transforms) {
-      bytes = await encoder.write(
+      written = await encoder.write(
         transform(new image.Transformer(bytes)),
         encodeOptions,
       );
     }
 
     return withWarnings(
-      await encoder.repack(image, bytes, encodeOptions),
+      await encoder.repack(image, written, encodeOptions),
       warnings,
     );
   }

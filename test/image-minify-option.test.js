@@ -457,6 +457,18 @@ describe("image minify option", () => {
     );
   });
 
+  it("should not offer `sharpMinify` a raw asset it could only fail on", async () => {
+    // Bare pixels carry no header, so sharp cannot read one back — offering
+    // it one fails the build rather than minifying anything.
+    expect(MinimizerPlugin.sharpMinify.filter("pixels.raw")).toBe(false);
+
+    const pixels = Buffer.alloc(32 * 32 * 3, 7);
+
+    await expect(require("sharp")(pixels).metadata()).rejects.toThrow(
+      /unsupported image format/,
+    );
+  });
+
   it("should keep an image a plugin turned into SVG", async () => {
     // The other direction of the same guard. SVG carries no signature, so
     // until it was read as the markup it is, a conversion *into* it named

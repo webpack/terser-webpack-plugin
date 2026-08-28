@@ -51,9 +51,10 @@ const ISO_BRANDS = new Map([
 ]);
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-// Past the signature and the IHDR chunk, where an `acTL` may precede the first
-// `IDAT` — which is what makes a PNG an APNG.
-const PNG_CHUNKS_START = 33;
+// A chunk is four bytes of length, four naming it, the data, then four of
+// checksum. The first one starts past the signature.
+const PNG_CHUNKS_START = PNG_SIGNATURE.length;
+const PNG_CHUNK_OVERHEAD = 12;
 
 /**
  * @param {Uint8Array} buffer the bytes
@@ -181,18 +182,36 @@ function isSvg(buffer) {
 /**
  * Whether a PNG carries an `acTL` chunk before its first `IDAT`, which makes it
  * an animated one.
+ *
+ * Walked chunk by chunk rather than scanned for the name, because a name is
+ * only a name where a chunk starts: a comment mentioning `acTL` would
+ * otherwise make a still image animated, and an ICC profile holding `IDAT` would
+ * end the search before the real `acTL`. Walking also steps over a profile in
+ * one jump instead of reading every byte of it.
  * @param {Uint8Array} buffer the bytes
  * @returns {boolean} true when it is animated
  */
 function isAnimatedPng(buffer) {
-  for (let i = PNG_CHUNKS_START; i < buffer.length - 4; i++) {
-    if (hasText(buffer, "IDAT", i)) {
+  let at = PNG_CHUNKS_START;
+
+  while (at + 8 <= buffer.length) {
+    if (hasText(buffer, "acTL", at + 4)) {
+      return true;
+    }
+
+    if (hasText(buffer, "IDAT", at + 4)) {
       return false;
     }
 
-    if (hasText(buffer, "acTL", i)) {
-      return true;
-    }
+    // Four bytes, most significant first; read as arithmetic because a shift
+    // would make anything past 2GiB negative.
+    const length =
+      buffer[at] * 0x1000000 +
+      buffer[at + 1] * 0x10000 +
+      buffer[at + 2] * 0x100 +
+      buffer[at + 3];
+
+    at += PNG_CHUNK_OVERHEAD + length;
   }
 
   return false;

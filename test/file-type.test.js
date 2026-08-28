@@ -19,36 +19,80 @@ const text = (leading, length = 64) =>
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /**
- * @param {string} chunk the chunk name to place where `acTL` would sit
- * @returns {Buffer} a PNG carrying it
+ * One PNG chunk: four bytes of length, four naming it, the data, then four of
+ * checksum. Built properly so a name inside a chunk's *data* is not mistaken
+ * for one starting a chunk.
+ * @param {string} name the chunk's name
+ * @param {Buffer=} data what it carries
+ * @returns {Buffer} the chunk
  */
-const png = (chunk) =>
+function chunk(name, data = Buffer.alloc(0)) {
+  const length = Buffer.alloc(4);
+
+  length.writeUInt32BE(data.length);
+
+  return Buffer.concat([
+    length,
+    Buffer.from(name, "ascii"),
+    data,
+    Buffer.alloc(4),
+  ]);
+}
+
+/**
+ * @param {...Buffer} chunks the chunks to carry, after the header
+ * @returns {Buffer} a PNG made of them
+ */
+const png = (...chunks) =>
   Buffer.concat([
     Buffer.from(PNG_SIGNATURE),
-    Buffer.alloc(25),
-    Buffer.from(chunk, "ascii"),
-    Buffer.alloc(16),
+    chunk("IHDR", Buffer.alloc(13)),
+    ...chunks,
   ]);
 
 describe("fileTypeFromBuffer", () => {
   it("should detect PNG", () => {
-    expect(fileTypeFromBuffer(png("IDAT"))).toEqual({
+    expect(fileTypeFromBuffer(png(chunk("IDAT", Buffer.alloc(8))))).toEqual({
       ext: "png",
       mime: "image/png",
     });
   });
 
   it("should detect APNG by its `acTL` chunk", () => {
-    expect(fileTypeFromBuffer(png("acTL"))).toEqual({
-      ext: "apng",
-      mime: "image/apng",
-    });
+    expect(
+      fileTypeFromBuffer(
+        png(chunk("acTL", Buffer.alloc(8)), chunk("IDAT", Buffer.alloc(8))),
+      ),
+    ).toEqual({ ext: "apng", mime: "image/apng" });
   });
 
   it("should not read an `acTL` after the first `IDAT` as animation", () => {
-    const late = Buffer.concat([png("IDAT"), Buffer.from("acTL", "ascii")]);
+    const late = png(chunk("IDAT", Buffer.alloc(8)), chunk("acTL"));
 
     expect(fileTypeFromBuffer(late).ext).toBe("png");
+  });
+
+  it("should not read a comment mentioning `acTL` as animation", () => {
+    // The name means something only where a chunk starts. Scanning for it
+    // instead made any image whose metadata says the word animated.
+    const described = png(
+      chunk("tEXt", Buffer.from("Comment: made with acTL tools")),
+      chunk("IDAT", Buffer.alloc(8)),
+    );
+
+    expect(fileTypeFromBuffer(described).ext).toBe("png");
+  });
+
+  it("should not let `IDAT` inside a profile end the search early", () => {
+    // The other way the same mistake reads: a real `acTL` after a profile
+    // whose bytes happen to spell `IDAT` was never reached.
+    const profiled = png(
+      chunk("iCCP", Buffer.from("profileIDATmore")),
+      chunk("acTL", Buffer.alloc(8)),
+      chunk("IDAT", Buffer.alloc(8)),
+    );
+
+    expect(fileTypeFromBuffer(profiled).ext).toBe("apng");
   });
 
   it("should read a PNG carrying neither chunk as still", () => {
@@ -58,6 +102,17 @@ describe("fileTypeFromBuffer", () => {
     ]);
 
     expect(fileTypeFromBuffer(truncated).ext).toBe("png");
+  });
+
+  it("should stop at a chunk whose length runs past the end", () => {
+    const lying = Buffer.concat([
+      Buffer.from(PNG_SIGNATURE),
+      chunk("IHDR", Buffer.alloc(13)),
+      Buffer.from("7fffffff", "hex"),
+      Buffer.from("acTL", "ascii"),
+    ]);
+
+    expect(fileTypeFromBuffer(lying).ext).toBe("apng");
   });
 
   it("should detect JPEG", () => {
