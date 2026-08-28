@@ -153,6 +153,35 @@ describe("image minify option", () => {
     expect(after.equals(before)).toBe(true);
   });
 
+  it.each([["avif"], ["jpeg"], ["png"], ["webp"]])(
+    "should re-encode %s with its own `napiRsImageMinify` codec",
+    async (format) => {
+      // Every entry of the encoder table needs an input: a binding wired to the
+      // wrong codec declines silently rather than failing.
+      const sharp = require("sharp");
+
+      const input = await sharp({
+        create: {
+          width: 64,
+          height: 64,
+          channels: 3,
+          background: { r: 200, g: 20, b: 60 },
+        },
+      })
+        .toFormat(format)
+        .toBuffer();
+
+      const { code } = await MinimizerPlugin.napiRsImageMinify({
+        [`image.${format}`]: input,
+      });
+
+      expect(Buffer.isBuffer(code)).toBe(true);
+      expect(fileTypeFromBuffer(code).ext).toBe(
+        format === "jpeg" ? "jpg" : format,
+      );
+    },
+  );
+
   it("should decline a format `napiRsImageMinify` cannot re-encode", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/images.js"),
