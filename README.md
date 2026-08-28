@@ -46,7 +46,7 @@ CSS minimizers:
 
 Image minimizers:
 
-- [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize or rotate on the way. Requires `npm install --save-dev sharp`.
+- [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize, rotate, flip, grayscale, blur or sharpen on the way — from the options or from the asset's own name. Requires `npm install --save-dev sharp`.
 - [`svgo`](https://github.com/svg/svgo) — `MinimizerPlugin.svgoMinify`. Minifies SVG, including an `asset/inline` SVG that no `test` can match. Requires `npm install --save-dev svgo`.
 - [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin.
 - [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg. Requires `npm install --save-dev @napi-rs/image`.
@@ -1552,21 +1552,32 @@ module.exports = {
 };
 ```
 
-`sharp` can also resize and rotate while it re-encodes:
+`sharp` can also transform the image while it re-encodes:
 
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g)$/i,
   minify: MinimizerPlugin.sharpMinify,
   minimizerOptions: {
-    // `unit` is "px" (default) or "percent"
-    resize: { width: 800, unit: "px" },
+    // `enabled` and `unit` ("px" by default, or "percent") are read here;
+    // everything else goes to sharp
+    // https://sharp.pixelplumbing.com/api-resize
+    resize: { width: 800, unit: "px", fit: "inside" },
     // A number of degrees, or "auto" to follow the EXIF orientation
     rotate: "auto",
+    flip: false,
+    flop: false,
+    grayscale: false,
+    // A sigma, or true for a fast default
+    blur: false,
+    sharpen: false,
     encodeOptions: { jpeg: { quality: 80 } },
   },
 });
 ```
+
+Each of these can also be asked for by an asset's own name — see
+[Query strings in asset names](#query-strings-in-asset-names).
 
 #### `svgo`
 
@@ -1711,26 +1722,60 @@ test: /\?v=2$/; // names the query itself
 the queried asset. Every built-in minimizer's own `filter` reads past the query
 in the same way.
 
-**Sizing one image from its import.** `sharpMinify` reads `width`, `height` and
-`unit` off the asset's name, so a single image can be resized where it is
-imported rather than in the configuration:
+**Asking sharp for something from the import.** `sharpMinify` reads what to do
+off the asset's name, so one image can be sized, turned or re-encoded where it
+is imported rather than in the configuration:
 
 ```js
-import banner from "./banner.png?width=320";
+import banner from "./banner.png?width=320&quality=80";
 ```
 
-| Query                    | Result                                  |
-| ------------------------ | --------------------------------------- |
-| `?width=320`             | 320px wide, height to match             |
-| `?w=64&h=64`             | exactly 64x64                           |
-| `?width=50&unit=percent` | half the original width                 |
-| `?width=auto`            | drops a width set in `minimizerOptions` |
+| Query                 | Short  | Value                                         | What it does                                 |
+| --------------------- | ------ | --------------------------------------------- | -------------------------------------------- |
+| `width`               | `w`    | pixels, or `auto`                             | target width                                 |
+| `height`              | `h`    | pixels, or `auto`                             | target height                                |
+| `unit`                | `u`    | `px` (default) or `percent`                   | how `width` and `height` are read            |
+| `fit`                 |        | `cover` (default), `contain`, `fill`, …       | what to do when both dimensions are given    |
+| `position`            | `pos`  | `centre` (default), `right top`, `entropy`, … | where to crop from                           |
+| `background`          | `bg`   | a colour                                      | what `contain` pads with                     |
+| `without-enlargement` |        | flag                                          | never scale the image up                     |
+| `rotate`              | `rot`  | degrees, or `auto`                            | turn by an angle, or by the EXIF orientation |
+| `flip`                |        | flag                                          | mirror vertically                            |
+| `flop`                |        | flag                                          | mirror horizontally                          |
+| `grayscale`           | `gray` | flag                                          | drop the colour                              |
+| `blur`                |        | sigma, or flag                                | blur                                         |
+| `sharpen`             |        | sigma, or flag                                | sharpen                                      |
+| `quality`             | `q`    | a number                                      | encode quality                               |
+| `lossless`            |        | flag                                          | encode losslessly, where the format has one  |
+| `effort`              |        | a number                                      | how hard the encoder tries                   |
+| `progressive`         | `prog` | flag                                          | interlace, where the format has it           |
 
-`w`, `h` and `u` are accepted as short forms, `unit` is `px` (the default) or
-`percent`, and `auto` drops a dimension set in `minimizerOptions.resize`. The
-query wins over the configuration, being the more specific of the two;
-`resize: { enabled: false }` still turns resizing off entirely. A value that is
-not a positive number is ignored, as is any other query parameter.
+| Import                                        | What comes out                                 |
+| --------------------------------------------- | ---------------------------------------------- |
+| `./photo.jpg?w=64&h=64&fit=cover&pos=entropy` | a 64x64 thumbnail, cropped to the busiest part |
+| `./photo.jpg?width=16&blur&quality=30`        | a tiny blurred placeholder                     |
+| `./logo.png?width=50&unit=percent&grayscale`  | half-size and grey                             |
+
+A **flag** is on when it is present — `?flip` — and reads `true`/`1`/`yes` the
+same way, `false`/`0`/`no` the other. `greyscale` and `grey` spell `grayscale`,
+`auto` on `width` or `height` drops one set in `minimizerOptions`, and a
+parameter can be spelled in any case.
+
+Every one of these can also be set in `minimizerOptions`; the name wins where
+both say something, being the more specific of the two. `resize: { enabled:
+false }` still turns resizing off entirely.
+
+Two rules decide what happens to a value:
+
+- **Its shape is checked here, and anything else is ignored.** An asset's name
+  carries queries this plugin never put there, so `?v=2` must not become a
+  resize — and neither does `?width=nonsense` or `?flip=maybe`.
+- **Whether a well-formed value is one sharp accepts is sharp's to report**, and
+  it answers per format: `effort` runs to 6 for webp and 9 for avif, `quality`
+  starts at 0 for png and 1 for jpeg, and a colour is whatever it can parse. A
+  value outside those fails the build with sharp's own message rather than being
+  dropped silently. An option a format has no use for — `?lossless` on a jpeg —
+  is simply ignored.
 
 Only `sharpMinify` reads these — it is the only bundled minimizer that resizes.
 

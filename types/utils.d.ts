@@ -14,6 +14,13 @@ export type EXPECTED_OBJECT = import("./index.js").EXPECTED_OBJECT;
 export type EXPECTED_ANY = import("./index.js").EXPECTED_ANY;
 export type ExtractedComments = string[];
 /**
+ * A bag of sharp parameters: whatever the table's `name`s are, read off a
+ * query or set in `minimizerOptions`.
+ */
+export type SharpTransforms = {
+  [name: string]: EXPECTED_ANY;
+};
+/**
  * Minify CSS using `clean-css`.
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map

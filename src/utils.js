@@ -1929,63 +1929,309 @@ function extensionOf(name) {
 }
 
 /**
- * The resize an asset's name asks for, merged over the configured one.
- *
- * `output.assetModuleFilename` carries the request's query into the emitted
- * name, so `import banner from "./banner.png?width=320"` arrives here as
- * `banner.png?width=320`. `w`, `h` and `u` are accepted as short forms, `auto`
- * drops a configured dimension, and the query wins over the configuration
- * because it is the more specific of the two.
- *
- * Resizing needs no new name — the asset keeps the one it already has — which
- * is why it can be read here rather than in a loader, unlike `?as=`.
- * @param {string} name asset name
- * @param {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean }=} resize the configured resize
- * @returns {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean } | undefined} what to resize to, or undefined when neither asks for one
+ * @param {string} value the text
+ * @returns {number | undefined} it as a number, when it is one
  */
-function resizeWithQuery(name, resize) {
+function readNumber(value) {
+  const number = Number(value);
+
+  return value.trim() !== "" && Number.isFinite(number) ? number : undefined;
+}
+
+/**
+ * @param {string} value the text
+ * @returns {number | undefined} it as a number above zero
+ */
+function readPositiveNumber(value) {
+  const number = readNumber(value);
+
+  return typeof number !== "undefined" && number > 0 ? number : undefined;
+}
+
+/**
+ * @param {string} value the text
+ * @returns {number | undefined} it as a whole number above zero
+ */
+function readPositiveInteger(value) {
+  const number = readPositiveNumber(value);
+
+  return typeof number !== "undefined" && Number.isInteger(number)
+    ? number
+    : undefined;
+}
+
+/**
+ * @param {string} value the text
+ * @returns {number | undefined} it as a whole number of zero or more
+ */
+function readWholeNumber(value) {
+  const number = readNumber(value);
+
+  return typeof number !== "undefined" &&
+    Number.isInteger(number) &&
+    number >= 0
+    ? number
+    : undefined;
+}
+
+const TRUE_TEXT = new Set(["", "true", "1", "yes"]);
+const FALSE_TEXT = new Set(["false", "0", "no"]);
+
+/**
+ * A parameter present with no value — `?flip` — reads as true.
+ * @param {string} value the text
+ * @returns {boolean | undefined} it as a boolean, when it is one
+ */
+function readFlag(value) {
+  const text = value.toLowerCase();
+
+  if (TRUE_TEXT.has(text)) {
+    return true;
+  }
+
+  return FALSE_TEXT.has(text) ? false : undefined;
+}
+
+/**
+ * @param {string} value the text
+ * @returns {number | boolean | undefined} how much, or whether at all
+ */
+function readAmount(value) {
+  const number = readPositiveNumber(value);
+
+  return typeof number === "undefined" ? readFlag(value) : number;
+}
+
+/**
+ * `null` drops a dimension the configuration set.
+ * @param {string} value the text
+ * @returns {number | null | undefined} the size asked for
+ */
+function readDimension(value) {
+  return value === "auto" ? null : readPositiveInteger(value);
+}
+
+/**
+ * The one parameter sharp never sees, so the only enum checked here.
+ * @param {string} value the text
+ * @returns {"px" | "percent" | undefined} the unit asked for
+ */
+function readUnit(value) {
+  return value === "px" || value === "percent" ? value : undefined;
+}
+
+/**
+ * @param {string} value the text
+ * @returns {number | "auto" | undefined} the angle, or the EXIF orientation
+ */
+function readAngle(value) {
+  return value === "auto" ? "auto" : readNumber(value);
+}
+
+/**
+ * @param {string} value the text
+ * @returns {string | undefined} it, when it says anything
+ */
+function readText(value) {
+  return value === "" ? undefined : value;
+}
+
+/**
+ * What an asset's name may ask sharp for: the spellings that name each
+ * parameter, which of sharp's three argument bags the value belongs in, the
+ * name sharp knows it by, and how the text is read. Adding a parameter is
+ * adding an entry.
+ *
+ * Only the *shape* of a value is checked, because a name carries queries this
+ * plugin never put there — `?v=2` must not become a resize. Whether a
+ * well-formed value is one sharp accepts is sharp's to answer, and it does so
+ * per format: `effort` runs to 6 for webp and 9 for avif, `fit` and `position`
+ * are enums it owns, and a colour is whatever it can parse. Enumerating any of
+ * that here would be a second, staler copy of sharp's own validation.
+ * @type {{ spellings: string[], group: "resize" | "pipeline" | "encode", name: string, read: (value: string) => EXPECTED_ANY }[]}
+ */
+const SHARP_QUERY_PARAMETERS = [
+  {
+    spellings: ["width", "w"],
+    group: "resize",
+    name: "width",
+    read: readDimension,
+  },
+  {
+    spellings: ["height", "h"],
+    group: "resize",
+    name: "height",
+    read: readDimension,
+  },
+  { spellings: ["unit", "u"], group: "resize", name: "unit", read: readUnit },
+  { spellings: ["fit"], group: "resize", name: "fit", read: readText },
+  {
+    spellings: ["position", "pos"],
+    group: "resize",
+    name: "position",
+    read: readText,
+  },
+  {
+    spellings: ["background", "bg"],
+    group: "resize",
+    name: "background",
+    read: readText,
+  },
+  {
+    spellings: ["without-enlargement", "withoutEnlargement"],
+    group: "resize",
+    name: "withoutEnlargement",
+    read: readFlag,
+  },
+  {
+    spellings: ["rotate", "rot"],
+    group: "pipeline",
+    name: "rotate",
+    read: readAngle,
+  },
+  { spellings: ["flip"], group: "pipeline", name: "flip", read: readFlag },
+  { spellings: ["flop"], group: "pipeline", name: "flop", read: readFlag },
+  {
+    spellings: ["grayscale", "greyscale", "gray", "grey"],
+    group: "pipeline",
+    name: "grayscale",
+    read: readFlag,
+  },
+  { spellings: ["blur"], group: "pipeline", name: "blur", read: readAmount },
+  {
+    spellings: ["sharpen"],
+    group: "pipeline",
+    name: "sharpen",
+    read: readAmount,
+  },
+  {
+    spellings: ["quality", "q"],
+    group: "encode",
+    name: "quality",
+    // Zero is a quality png accepts and jpeg does not, so sharp decides.
+    read: readWholeNumber,
+  },
+  {
+    spellings: ["lossless"],
+    group: "encode",
+    name: "lossless",
+    read: readFlag,
+  },
+  {
+    spellings: ["effort"],
+    group: "encode",
+    name: "effort",
+    read: readWholeNumber,
+  },
+  {
+    spellings: ["progressive", "prog"],
+    group: "encode",
+    name: "progressive",
+    read: readFlag,
+  },
+];
+
+/**
+ * A bag of sharp parameters: whatever the table's `name`s are, read off a
+ * query or set in `minimizerOptions`.
+ * @typedef {{ [name: string]: EXPECTED_ANY }} SharpTransforms
+ */
+
+/**
+ * The pipeline parameters that are a sharp method of the same name taking one
+ * argument. `rotate` is not among them: its no-argument call means EXIF.
+ * @type {("flip" | "flop" | "grayscale" | "blur" | "sharpen")[]}
+ */
+const SHARP_PIPELINE_OPERATIONS = [
+  "flip",
+  "flop",
+  "grayscale",
+  "blur",
+  "sharpen",
+];
+
+/** @type {Map<string, (typeof SHARP_QUERY_PARAMETERS)[number]>} */
+const SHARP_QUERY_PARAMETER_BY_SPELLING = new Map();
+
+for (const parameter of SHARP_QUERY_PARAMETERS) {
+  for (const spelling of parameter.spellings) {
+    // Looked up in lower case, so a spelling is written however it reads best.
+    SHARP_QUERY_PARAMETER_BY_SPELLING.set(spelling.toLowerCase(), parameter);
+  }
+}
+
+/**
+ * What an asset's name asks sharp for, grouped by the argument bag it belongs
+ * in. `output.assetModuleFilename` carries the request's query into the
+ * emitted name, so `import banner from "./banner.png?width=320"` arrives here
+ * as `banner.png?width=320`.
+ *
+ * None of this needs a new name — the asset keeps the one it already has —
+ * which is why it can be read here rather than in a loader, unlike `?as=`.
+ * @param {string} name asset name
+ * @returns {{ resize?: SharpTransforms, pipeline?: SharpTransforms, encode?: SharpTransforms } | undefined} what it asks for, or undefined when it asks for nothing
+ */
+function sharpQuery(name) {
   const queryIndex = name.indexOf("?");
 
   if (queryIndex === -1) {
-    return resize;
+    return undefined;
   }
 
-  const query = new URLSearchParams(name.slice(queryIndex + 1));
-  const merged = { ...resize };
-  let asked = false;
+  const query = name.slice(queryIndex + 1);
+  const fragmentIndex = query.indexOf("#");
+  /** @type {{ [group: string]: { [name: string]: EXPECTED_ANY } }} */
+  const asked = {};
+  let asksForAnything = false;
 
-  for (const dimension of /** @type {("width" | "height")[]} */ ([
-    "width",
-    "height",
-  ])) {
-    const value = query.get(dimension) || query.get(dimension[0]);
+  for (const [spelling, text] of new URLSearchParams(
+    fragmentIndex === -1 ? query : query.slice(0, fragmentIndex),
+  )) {
+    const parameter = SHARP_QUERY_PARAMETER_BY_SPELLING.get(
+      spelling.toLowerCase(),
+    );
 
+    if (!parameter) {
+      continue;
+    }
+
+    const value = parameter.read(text);
+
+    if (typeof value === "undefined") {
+      continue;
+    }
+
+    asked[parameter.group] = asked[parameter.group] || {};
+    asked[parameter.group][parameter.name] = value;
+    asksForAnything = true;
+  }
+
+  return asksForAnything ? asked : undefined;
+}
+
+/**
+ * The query wins over the configuration, being the more specific of the two.
+ * @template {EXPECTED_OBJECT} T
+ * @param {T | undefined} configured what `minimizerOptions` set
+ * @param {EXPECTED_OBJECT=} requested what the name asked for
+ * @returns {T | undefined} the two merged, or undefined when neither says anything
+ */
+function mergeRequested(configured, requested) {
+  if (!requested) {
+    return configured;
+  }
+
+  const merged = /** @type {EXPECTED_ANY} */ ({ ...configured });
+
+  for (const [name, value] of Object.entries(requested)) {
     if (value === null) {
-      continue;
-    }
-
-    asked = true;
-
-    if (value === "auto") {
-      delete merged[dimension];
-      continue;
-    }
-
-    const size = Number.parseInt(value, 10);
-
-    if (Number.isFinite(size) && size > 0) {
-      merged[dimension] = size;
+      delete merged[name];
+    } else {
+      merged[name] = value;
     }
   }
 
-  const unit = query.get("unit") || query.get("u");
-
-  if (unit === "px" || unit === "percent") {
-    merged.unit = unit;
-    asked = true;
-  }
-
-  return asked || resize ? merged : undefined;
+  return merged;
 }
 
 /**
@@ -2036,9 +2282,17 @@ const SHARP_MINIFY_FORMATS = new Map([
 async function sharpMinify(input, sourceMap, minimizerOptions) {
   /**
    * @typedef {object} SharpMinifyOptions
-   * @property {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean }=} resize resize the image before re-encoding it. A `?width=`/`?height=`/`?unit=` in the asset's name overrides what is set here
+   * @property {(import("sharp").ResizeOptions & { unit?: "px" | "percent", enabled?: boolean })=} resize resize the image before re-encoding it
    * @property {number | "auto"=} rotate rotate by an angle, or by what the EXIF orientation says
+   * @property {boolean=} flip mirror vertically
+   * @property {boolean=} flop mirror horizontally
+   * @property {boolean=} grayscale drop the colour
+   * @property {number | boolean=} blur blur by this sigma, or by a fast default
+   * @property {number | boolean=} sharpen sharpen by this sigma, or by a fast default
    * @property {{ [format: string]: EXPECTED_OBJECT }=} encodeOptions per-format options, keyed by sharp's format name
+   *
+   * Every one of these can also be asked for by the asset's own name — see
+   * `SHARP_QUERY_PARAMETERS` — and the name wins where both say something.
    */
   const [[name, code]] = Object.entries(input);
   const format = SHARP_MINIFY_FORMATS.get(extensionOf(name));
@@ -2057,13 +2311,39 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
 
   const pipeline = sharp(toBuffer(code), { animated: true });
 
-  if (typeof options.rotate === "number") {
-    pipeline.rotate(options.rotate);
-  } else if (options.rotate === "auto") {
+  const requested = sharpQuery(name);
+  const transforms = /** @type {SharpTransforms} */ (
+    mergeRequested(
+      {
+        rotate: options.rotate,
+        flip: options.flip,
+        flop: options.flop,
+        grayscale: options.grayscale,
+        blur: options.blur,
+        sharpen: options.sharpen,
+      },
+      requested && requested.pipeline,
+    )
+  );
+
+  if (typeof transforms.rotate === "number") {
+    pipeline.rotate(transforms.rotate);
+  } else if (transforms.rotate === "auto") {
     pipeline.rotate();
   }
 
-  const requestedResize = resizeWithQuery(name, options.resize);
+  // Each takes one argument and accepts `false`, so the name is enough to
+  // drive it. sharp orders the operations itself, whatever order they arrive.
+  for (const operation of SHARP_PIPELINE_OPERATIONS) {
+    if (typeof transforms[operation] !== "undefined") {
+      pipeline[operation](/** @type {EXPECTED_ANY} */ (transforms[operation]));
+    }
+  }
+
+  const requestedResize = mergeRequested(
+    options.resize,
+    requested && requested.resize,
+  );
 
   if (requestedResize) {
     const { enabled = true, unit = "px", ...params } = requestedResize;
@@ -2090,7 +2370,10 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
 
   pipeline.toFormat(
     /** @type {EXPECTED_ANY} */ (format),
-    options.encodeOptions && options.encodeOptions[format],
+    mergeRequested(
+      options.encodeOptions && options.encodeOptions[format],
+      requested && requested.encode,
+    ),
   );
 
   return { code: await pipeline.toBuffer() };

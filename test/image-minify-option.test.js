@@ -217,6 +217,24 @@ describe("image minify option", () => {
     ["?width=auto", { resize: { width: 10, height: 30 } }, [60, 30]],
     // Turning resizing off is the configuration's to decide, not the query's.
     ["?width=64", { resize: { enabled: false } }, [200, 100]],
+    // `fit` decides what happens when both dimensions are given.
+    ["?w=64&h=64&fit=cover", {}, [64, 64]],
+    ["?w=64&h=64&fit=contain&bg=%23ff0000", {}, [64, 64]],
+    // `inside` keeps the aspect ratio within the box rather than filling it.
+    ["?w=64&h=64&fit=inside", {}, [64, 32]],
+    ["?w=64&h=64&fit=outside", {}, [128, 64]],
+    ["?w=64&h=64&fit=cover&position=right+top", {}, [64, 64]],
+    ["?w=64&h=64&fit=cover&pos=entropy", {}, [64, 64]],
+    // Enlarging is what sharp does by default, and what this turns off.
+    ["?w=400", {}, [400, 200]],
+    ["?w=400&without-enlargement", {}, [200, 100]],
+    // Spelled as sharp spells it, or with the hyphen a URL invites.
+    ["?w=400&withoutEnlargement=1", {}, [200, 100]],
+    ["?w=400&without-enlargement=false", {}, [400, 200]],
+    // A fragment can follow the query, and is not part of it.
+    ["?width=64#deep", {}, [64, 32]],
+    // A resize the query alone asks for, with nothing configured.
+    ["?w=64&fit=inside", { resize: undefined }, [64, 32]],
   ])(
     "should read the size %s off the asset name",
     async (query, options, [width, height]) => {
@@ -533,6 +551,236 @@ describe("image minify option", () => {
     expect(readBytes(compiler, stats, "main.js").toString()).toContain(
       "console.log(e,r,o)",
     );
+  });
+});
+
+describe("what an asset's name asks sharp for", () => {
+  /**
+   * A gradient with noise. A flat colour is invariant under flip, blur and
+   * grayscale alike, so it would satisfy every assertion below without them.
+   * @param {import("sharp")} sharp sharp
+   * @param {string=} format the format to encode as
+   * @returns {Promise<Buffer>} the encoded image
+   */
+  function patterned(sharp, format = "png") {
+    const width = 120;
+    const height = 60;
+    const raw = Buffer.alloc(width * height * 3);
+    let seed = 12345;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+
+        const i = (y * width + x) * 3;
+
+        raw[i] = (x * 2 + (seed % 40)) % 256;
+        raw[i + 1] = (y * 3 + ((seed >> 8) % 40)) % 256;
+        raw[i + 2] = (x + y + ((seed >> 16) % 40)) % 256;
+      }
+    }
+
+    return sharp(raw, { raw: { width, height, channels: 3 } })
+      .toFormat(
+        format,
+        format === "png" ? { compressionLevel: 0 } : { quality: 100 },
+      )
+      .toBuffer();
+  }
+
+  /**
+   * @param {string} query the query to put on the asset's name
+   * @param {object=} options minimizer options
+   * @param {string=} format the format to encode as
+   * @returns {Promise<Buffer>} what the minimizer returned
+   */
+  async function minified(query, options, format = "png") {
+    const sharp = require("sharp");
+
+    const { code } = await MinimizerPlugin.sharpMinify(
+      { [`image.${format}${query}`]: await patterned(sharp, format) },
+      undefined,
+      options,
+    );
+
+    return code;
+  }
+
+  /**
+   * @param {Buffer} image an encoded image
+   * @returns {Promise<Buffer>} its pixels
+   */
+  const pixels = (image) => require("sharp")(image).raw().toBuffer();
+
+  it("should mirror vertically for `flip`", async () => {
+    const sharp = require("sharp");
+
+    const mirrored = await sharp(await patterned(sharp))
+      .flip()
+      .png()
+      .toBuffer();
+
+    expect(await pixels(await minified("?flip"))).toEqual(
+      await pixels(mirrored),
+    );
+  });
+
+  it("should mirror horizontally for `flop`", async () => {
+    const sharp = require("sharp");
+
+    const mirrored = await sharp(await patterned(sharp))
+      .flop()
+      .png()
+      .toBuffer();
+
+    expect(await pixels(await minified("?flop=true"))).toEqual(
+      await pixels(mirrored),
+    );
+  });
+
+  it.each(["grayscale", "greyscale", "gray", "grey"])(
+    "should drop the colour for `%s`",
+    async (spelling) => {
+      const raw = await pixels(await minified(`?${spelling}`));
+      const grey = [];
+
+      for (let i = 0; i < raw.length; i += 3) {
+        grey.push(raw[i] === raw[i + 1] && raw[i + 1] === raw[i + 2]);
+      }
+
+      expect(grey.every(Boolean)).toBe(true);
+      // The fixture is not grey to begin with, so that meant something.
+      expect(await pixels(await minified(""))).not.toEqual(raw);
+    },
+  );
+
+  it("should turn by an angle for `rotate`, and read EXIF for `auto`", async () => {
+    await expect(
+      require("sharp")(await minified("?rotate=90")).metadata(),
+    ).resolves.toMatchObject({ width: 60, height: 120 });
+    // Nothing in the fixture says otherwise, so this leaves it alone.
+    await expect(
+      require("sharp")(await minified("?rot=auto")).metadata(),
+    ).resolves.toMatchObject({ width: 120, height: 60 });
+  });
+
+  it.each([
+    ["blur", "?blur=3"],
+    ["blur", "?blur"],
+    ["sharpen", "?sharpen"],
+  ])("should change the pixels for `%s` given %s", async (_name, query) => {
+    const changed = await pixels(await minified(query));
+
+    expect(changed).not.toEqual(await pixels(await minified("")));
+    // Only the pixels, not the size.
+    expect(changed).toHaveLength(120 * 60 * 3);
+  });
+
+  it.each(["?flip", "?flip=", "?flip=true", "?flip=1", "?flip=yes"])(
+    "should read %s as asking for it",
+    async (query) => {
+      const sharp = require("sharp");
+
+      const mirrored = await sharp(await patterned(sharp))
+        .flip()
+        .png()
+        .toBuffer();
+
+      expect(await pixels(await minified(query))).toEqual(
+        await pixels(mirrored),
+      );
+    },
+  );
+
+  it.each(["?flip=false", "?flip=0", "?flip=no"])(
+    "should read %s as asking against it",
+    async (query) => {
+      expect(await pixels(await minified(query))).toEqual(
+        await pixels(await minified("")),
+      );
+    },
+  );
+
+  it("should let the query turn off what the configuration turned on", async () => {
+    expect(await pixels(await minified("?flip=false", { flip: true }))).toEqual(
+      await pixels(await minified("")),
+    );
+  });
+
+  it("should apply a transform set in `minimizerOptions` alone", async () => {
+    expect(await pixels(await minified("", { grayscale: true }))).toEqual(
+      await pixels(await minified("?grayscale")),
+    );
+  });
+
+  it("should read `quality` off the name, overriding `encodeOptions`", async () => {
+    const cheap = await minified("?quality=20", undefined, "jpeg");
+    const dear = await minified("?q=95", undefined, "jpeg");
+
+    expect(cheap.length).toBeLessThan(dear.length);
+    // The name is the more specific of the two, so it wins.
+    const configured = { encodeOptions: { jpeg: { quality: 95 } } };
+
+    expect(await minified("?q=20", configured, "jpeg")).toHaveLength(
+      cheap.length,
+    );
+    expect(await minified("", configured, "jpeg")).toHaveLength(dear.length);
+  });
+
+  it.each([
+    ["?lossless", "webp"],
+    ["?effort=6", "webp"],
+    ["?progressive", "jpeg"],
+  ])("should read %s off the name for a %s", async (query, format) => {
+    expect(await minified(query, undefined, format)).not.toHaveLength(
+      (await minified("", undefined, format)).length,
+    );
+  });
+
+  it("should ignore an encode option the format has no use for", async () => {
+    // sharp reads the keys it knows and leaves the rest, so `lossless` on a
+    // jpeg is neither an error nor a change.
+    expect(await minified("?lossless", undefined, "jpeg")).toHaveLength(
+      (await minified("", undefined, "jpeg")).length,
+    );
+  });
+
+  it.each([
+    // A value of the wrong shape is not a value, whatever it names.
+    ["?flip=maybe", "flip"],
+    ["?grayscale=perhaps", "grayscale"],
+    ["?rotate=sideways", "rotate"],
+    ["?blur=lots", "blur"],
+    ["?sharpen=vigorously", "sharpen"],
+    ["?quality=high", "quality"],
+    ["?effort=-1", "effort"],
+    ["?lossless=sort-of", "lossless"],
+    ["?fit=", "fit"],
+    ["?position=", "position"],
+    ["?background=", "background"],
+    ["?unit=furlongs&width=50", "unit"],
+  ])("should ignore %s, which is not a %s", async (query) => {
+    const asked = await minified(query);
+    const plain = await minified(
+      query === "?unit=furlongs&width=50" ? "?width=50" : "",
+    );
+
+    expect(await pixels(asked)).toEqual(await pixels(plain));
+  });
+
+  it.each([
+    ["an unknown fit", "?w=64&fit=nonsense", /valid fit/],
+    [
+      "a colour it cannot parse",
+      "?w=64&h=64&fit=contain&bg=nope",
+      /parse color/,
+    ],
+    ["a quality out of range", "?quality=101", /between 0 and 100/],
+    ["an effort past the format's range", "?effort=7", /between 0 and 6/],
+  ])("should let sharp report %s", async (_name, query, message) => {
+    const format = query.includes("effort") ? "webp" : "png";
+
+    await expect(minified(query, undefined, format)).rejects.toThrow(message);
   });
 });
 
