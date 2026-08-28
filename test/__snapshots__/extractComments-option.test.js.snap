@@ -6066,13 +6066,16 @@ exports[`extractComments option should work with the existing licenses file: ass
 (()=>{var t={12(t){t.exports=Math.random()}};const o={};(function r(n){const s=o[n];if(void 0!==s)return s.exports;const e=o[n]={exports:{}};return t[n](e,e.exports,r),e.exports})(12)})();",
   "licenses.txt": "// Existing Comment
 
+/*! Legal Comment */
+
+/** @license Copyright 2112 Moon. **/
+
+
 /**
  * Duplicate comment in difference files.
  * @license MIT
  */
 
-
-/*! Legal Comment */
 
 /*! Legal Foo */
 
@@ -6089,7 +6092,6 @@ exports[`extractComments option should work with the existing licenses file: ass
  */
 
 // @lic
-
 
 /**
  * Duplicate comment in same file.
