@@ -11,10 +11,14 @@ const {
   getEcmaVersion,
   getMinimizerOptionsAt,
   htmlMinifierTerser,
+  imageminMinify,
+  imageminNormalizeConfig,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
+  sharpMinify,
+  svgoMinify,
   swcMinify,
   swcMinifyCss,
   swcMinifyHtml,
@@ -100,7 +104,7 @@ const {
 
 /**
  * @typedef {object} MinimizedResult
- * @property {string=} code code
+ * @property {(string | Buffer)=} code code — a `Buffer` from a minimizer that declares `supportsBinary`
  * @property {RawSourceMap=} map source map
  * @property {(Error | string)[]=} errors errors
  * @property {(Error | string)[]=} warnings warnings
@@ -108,7 +112,7 @@ const {
  */
 
 /**
- * @typedef {{ [file: string]: string }} Input
+ * @typedef {{ [file: string]: string | Buffer }} Input
  */
 
 /**
@@ -140,6 +144,7 @@ const {
  * @property {() => string | undefined=} getMinimizerVersion function that returns version of minimizer
  * @property {() => boolean | undefined=} supportsWorkerThreads true when minimizer support worker threads, otherwise false
  * @property {() => boolean | undefined=} supportsWorker true when minimizer support worker, otherwise false
+ * @property {() => boolean | undefined=} supportsBinary true when the minimizer takes the asset's bytes rather than its text — an image minimizer. Its input reaches it as a `Buffer` and its `code` may be one. Only when every minimizer an asset is dispatched to declares it, since one that does not could not read the bytes
  * @property {(name: string, info?: AssetInfo) => boolean | undefined=} filter return true when the minimizer supports the asset, otherwise false. When an array of minimizers is configured, each asset is dispatched only to the minimizers whose `filter` accepts it. Assets rejected by every minimizer in the array are skipped entirely.
  * @property {() => string[] | undefined=} getTypes the languages this minimizer minifies, e.g. `["css"]`. Source that carries no filename — what a module embeds in another language's output — is dispatched by this rather than by `test` / `filter`, and a minimizer that declares nothing is never handed any
  * @property {(minimizerOptions?: EXPECTED_OBJECT) => string[] | undefined=} getEmbeddedTypes the languages this minimizer can hand out from inside what it minifies, through the `renderEmbeddedSource` option. Empty (or absent) means it nests nothing a caller can reach, and the option is not passed
@@ -154,7 +159,7 @@ const {
  * @template T
  * @typedef {object} InternalOptions
  * @property {string} name name
- * @property {string} input input
+ * @property {string | Buffer} input input — bytes for a minimizer that declares `supportsBinary`
  * @property {RawSourceMap | undefined} inputSourceMap input source map
  * @property {ExtractCommentsOptions | undefined} extractComments extract comments option
  * @property {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} minimizer minimizer
@@ -514,13 +519,22 @@ class TerserPlugin {
     /** @type {undefined | number} */
     let numberOfWorkers;
 
+    // Per implementation rather than over all of them: an asset is dispatched
+    // only to the minimizers its name matched, so one that cannot run in a
+    // worker — an image minimizer, whose bytes have no way across — must not
+    // take the pool away from the JavaScript ones configured beside it.
+    const workerCapable = implementations.map(
+      (impl) =>
+        typeof impl.supportsWorker === "undefined" ||
+        (typeof impl.supportsWorker === "function" && impl.supportsWorker()),
+    );
+    const binaryCapable = implementations.map(
+      (impl) =>
+        typeof impl.supportsBinary === "function" && impl.supportsBinary(),
+    );
     const needCreateWorker =
       optimizeOptions.availableNumberOfCores > 0 &&
-      implementations.every(
-        (impl) =>
-          typeof impl.supportsWorker === "undefined" ||
-          (typeof impl.supportsWorker === "function" && impl.supportsWorker()),
-      );
+      workerCapable.includes(true);
 
     if (needCreateWorker) {
       // Do not create unnecessary workers when the number of files is less than the available cores, it saves memory
@@ -541,8 +555,10 @@ class TerserPlugin {
           (
             new Worker(require.resolve("./minify"), {
               numWorkers: numberOfWorkers,
+              // Only what can reach the pool decides how it is run.
               enableWorkerThreads: implementations.every(
-                (impl) =>
+                (impl, i) =>
+                  !workerCapable[i] ||
                   typeof impl.supportsWorkerThreads === "undefined" ||
                   impl.supportsWorkerThreads() !== false,
               ),
@@ -571,10 +587,11 @@ class TerserPlugin {
 
     /**
      * @param {InternalOptions<T>} options what to minify
+     * @param {number[]} matched indices of the minimizers this asset is dispatched to
      * @returns {Promise<MinimizedResult>} the result
      */
-    const run = (options) =>
-      getWorker
+    const run = (options, matched) =>
+      getWorker && matched.every((i) => workerCapable[i])
         ? getWorker().transform(getSerializeJavascript()(options))
         : minify(options);
 
@@ -608,7 +625,12 @@ class TerserPlugin {
             }
           }
 
-          if (Buffer.isBuffer(input)) {
+          // Only a minimizer that says it reads bytes gets them: every other
+          // one is handed the text it has always been handed.
+          if (
+            Buffer.isBuffer(input) &&
+            !matched.every((i) => binaryCapable[i])
+          ) {
             input = input.toString();
           }
 
@@ -656,7 +678,7 @@ class TerserPlugin {
           options.ecma = getEcmaVersion(compiler.options.output.environment);
 
           try {
-            output = await run(options);
+            output = await run(options, matched);
           } catch (error) {
             const hasSourceMap =
               inputSourceMap && TerserPlugin.isSourceMap(inputSourceMap);
@@ -733,6 +755,7 @@ class TerserPlugin {
               (this.options.extractComments).banner !== false &&
               output.extractedComments &&
               output.extractedComments.length > 0 &&
+              typeof output.code === "string" &&
               output.code.startsWith("#!")
             ) {
               const firstNewlinePosition = output.code.indexOf("\n");
@@ -868,10 +891,18 @@ class TerserPlugin {
       });
     }
 
+    // Without the pool the work runs here, so the same bound applies: a
+    // minimizer that holds a whole image in memory is not one to start once
+    // per asset at the same moment.
     const limit =
       getWorker && numberOfAssets > 0
         ? /** @type {number} */ (numberOfWorkers)
-        : scheduledTasks.length;
+        : optimizeOptions.availableNumberOfCores > 0
+          ? Math.min(
+              scheduledTasks.length,
+              optimizeOptions.availableNumberOfCores,
+            )
+          : scheduledTasks.length;
     await throttleAll(limit, scheduledTasks);
 
     if (initializedWorker) {
@@ -1341,5 +1372,9 @@ TerserPlugin.cleanCssMinify = cleanCssMinify;
 TerserPlugin.esbuildMinifyCss = esbuildMinifyCss;
 TerserPlugin.lightningCssMinify = lightningCssMinify;
 TerserPlugin.swcMinifyCss = swcMinifyCss;
+TerserPlugin.imageminMinify = imageminMinify;
+TerserPlugin.imageminNormalizeConfig = imageminNormalizeConfig;
+TerserPlugin.sharpMinify = sharpMinify;
+TerserPlugin.svgoMinify = svgoMinify;
 
 module.exports = TerserPlugin;

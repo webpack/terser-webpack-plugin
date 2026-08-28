@@ -120,6 +120,10 @@ declare namespace TerserPlugin {
     esbuildMinifyCss,
     lightningCssMinify,
     swcMinifyCss,
+    imageminMinify,
+    imageminNormalizeConfig,
+    sharpMinify,
+    svgoMinify,
     Schema,
     Compiler,
     Compilation,
@@ -173,6 +177,10 @@ import { cleanCssMinify } from "./utils";
 import { esbuildMinifyCss } from "./utils";
 import { lightningCssMinify } from "./utils";
 import { swcMinifyCss } from "./utils";
+import { imageminMinify } from "./utils";
+import { imageminNormalizeConfig } from "./utils";
+import { sharpMinify } from "./utils";
+import { svgoMinify } from "./utils";
 type Schema = import("schema-utils/declarations/validate").Schema;
 type Compiler = import("webpack").Compiler;
 type Compilation = import("webpack").Compilation;
@@ -295,9 +303,9 @@ type EmbeddedSourceHooks = {
 };
 type MinimizedResult = {
   /**
-   * code
+   * code — a `Buffer` from a minimizer that declares `supportsBinary`
    */
-  code?: string | undefined;
+  code?: (string | Buffer) | undefined;
   /**
    * source map
    */
@@ -316,7 +324,7 @@ type MinimizedResult = {
   extractedComments?: string[] | undefined;
 };
 type Input = {
-  [file: string]: string;
+  [file: string]: string | Buffer;
 };
 type CustomOptions = {
   [key: string]: EXPECTED_ANY;
@@ -345,6 +353,10 @@ type MinimizeFunctionHelpers = {
    */
   supportsWorker?: (() => boolean | undefined) | undefined;
   /**
+   * true when the minimizer takes the asset's bytes rather than its text — an image minimizer. Its input reaches it as a `Buffer` and its `code` may be one. Only when every minimizer an asset is dispatched to declares it, since one that does not could not read the bytes
+   */
+  supportsBinary?: (() => boolean | undefined) | undefined;
+  /**
    * return true when the minimizer supports the asset, otherwise false. When an array of minimizers is configured, each asset is dispatched only to the minimizers whose `filter` accepts it. Assets rejected by every minimizer in the array are skipped entirely.
    */
   filter?:
@@ -371,9 +383,9 @@ type InternalOptions<T> = {
    */
   name: string;
   /**
-   * input
+   * input — bytes for a minimizer that declares `supportsBinary`
    */
-  input: string;
+  input: string | Buffer;
   /**
    * input source map
    */

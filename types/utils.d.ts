@@ -246,6 +246,53 @@ export namespace htmlMinifierTerser {
   function filter(name: string): boolean;
 }
 /**
+ * Minify an image using `imagemin` and the plugins named in the options.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+export function imageminMinify(
+  input: Input,
+  sourceMap?: RawSourceMap | undefined,
+  minimizerOptions?: CustomOptions | undefined,
+): Promise<MinimizedResult>;
+export namespace imageminMinify {
+  /**
+   * @returns {string | undefined} the minimizer version
+   */
+  function getMinimizerVersion(): string | undefined;
+  /**
+   * The asset reaches this one as bytes rather than as text.
+   * @returns {boolean} true, images are binary
+   */
+  function supportsBinary(): boolean;
+  /**
+   * Its plugins shell out to native binaries of their own, and its input cannot
+   * cross the worker boundary as text, so it stays in process.
+   * @returns {boolean} false
+   */
+  function supportsWorker(): boolean;
+  /**
+   * @returns {boolean} false
+   */
+  function supportsWorkerThreads(): boolean;
+  /**
+   * @param {string} name asset name
+   * @returns {boolean} true if `name` looks like an image
+   */
+  function filter(name: string): boolean;
+}
+/**
+ * Resolve the `plugins` entry of an `imagemin` configuration to the plugin
+ * functions it names, importing each one.
+ * @param {EXPECTED_OBJECT=} imageminConfig imagemin configuration
+ * @returns {Promise<EXPECTED_OBJECT>} the configuration with resolved plugins
+ */
+export function imageminNormalizeConfig(
+  imageminConfig?: EXPECTED_OBJECT | undefined,
+): Promise<EXPECTED_OBJECT>;
+/**
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map
  * @param {CustomOptions=} minimizerOptions options
@@ -345,6 +392,77 @@ export namespace minifyHtmlNode {
   /**
    * @param {string} name asset name
    * @returns {boolean} true if `name` looks like an HTML file
+   */
+  function filter(name: string): boolean;
+}
+/**
+ * Minify an image using `sharp`, re-encoding it as its own format.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+export function sharpMinify(
+  input: Input,
+  sourceMap?: RawSourceMap | undefined,
+  minimizerOptions?: CustomOptions | undefined,
+): Promise<MinimizedResult>;
+export namespace sharpMinify {
+  /**
+   * @returns {string | undefined} the minimizer version
+   */
+  function getMinimizerVersion(): string | undefined;
+  /**
+   * The asset reaches this one as bytes rather than as text.
+   * @returns {boolean} true, images are binary
+   */
+  function supportsBinary(): boolean;
+  /**
+   * sharp runs its own thread pool over native code, and its input cannot cross
+   * the worker boundary as text, so it stays in process.
+   * @returns {boolean} false
+   */
+  function supportsWorker(): boolean;
+  /**
+   * @returns {boolean} false
+   */
+  function supportsWorkerThreads(): boolean;
+  /**
+   * @param {string} name asset name
+   * @returns {boolean} true if sharp can re-encode `name` as its own format
+   */
+  function filter(name: string): boolean;
+}
+/**
+ * Minify an SVG using `svgo`.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for SVG)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+export function svgoMinify(
+  input: Input,
+  sourceMap?: RawSourceMap | undefined,
+  minimizerOptions?: CustomOptions | undefined,
+): Promise<MinimizedResult>;
+export namespace svgoMinify {
+  /**
+   * @returns {string | undefined} the minimizer version
+   */
+  function getMinimizerVersion(): string | undefined;
+  /**
+   * @returns {boolean} true
+   */
+  function supportsWorkerThreads(): boolean;
+  /**
+   * The language this minifies, for a caller dispatching source that carries
+   * no filename of its own — an `asset/inline` SVG reaches this and no asset.
+   * @returns {string[]} the languages
+   */
+  function getTypes(): string[];
+  /**
+   * @param {string} name asset name
+   * @returns {boolean} true if `name` looks like an SVG file
    */
   function filter(name: string): boolean;
 }

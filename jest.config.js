@@ -27,6 +27,31 @@ const RUN_EMBEDDED_TESTS = (() => {
   }
 })();
 
+// The image minimizers reach for packages the legacy rows never get: `sharp`
+// ships a native binary that the `--ignore-scripts` installs skip, and
+// `imagemin` is ESM-only. Asked of the packages rather than of the version
+// string, the same way the embedded-source check is. Named through variables
+// so they are resolved at call time rather than by the import linter.
+const IMAGE_MINIMIZER_PACKAGES = ["sharp", "svgo"];
+const HAS_IMAGE_MINIMIZER_PACKAGES = IMAGE_MINIMIZER_PACKAGES.every((name) => {
+  try {
+    require(name);
+
+    return true;
+  } catch (_err) {
+    return false;
+  }
+});
+// `imagemin` is ESM-only, so anything reaching it goes through an `import()`
+// inside a jest VM context. On Node 14 that takes the worker process down with
+// a SIGSEGV instead of throwing — with the flag or without it — so the suites
+// that reach it run only where `scripts/jest.js` turns VM modules on, which is
+// also the first Node `imagemin` itself supports.
+const RUN_ESM_IMPORT_TESTS = process.execArgv.includes(
+  "--experimental-vm-modules",
+);
+const RUN_IMAGE_TESTS = HAS_IMAGE_MINIMIZER_PACKAGES && RUN_ESM_IMPORT_TESTS;
+
 const testPathIgnorePatterns = [];
 
 if (!RUN_CSS_TESTS) {
@@ -39,6 +64,14 @@ if (!RUN_SWC_HTML_TESTS) {
 
 if (!RUN_EMBEDDED_TESTS) {
   testPathIgnorePatterns.push("/test/embedded-source\\.test\\.js$");
+}
+
+if (!RUN_IMAGE_TESTS) {
+  testPathIgnorePatterns.push("/test/image-minify-option\\.test\\.js$");
+}
+
+if (!RUN_ESM_IMPORT_TESTS) {
+  testPathIgnorePatterns.push("/test/imagemin-normalize-config\\.test\\.js$");
 }
 
 module.exports = {
