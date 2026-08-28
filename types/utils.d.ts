@@ -1,3 +1,11 @@
+export type Task<T> = () => Promise<T>;
+export type QueryParameter = {
+  spellings: string[];
+  group: string;
+  name: string;
+  read: (value: string) => EXPECTED_ANY;
+};
+export type FunctionReturning<T> = () => T;
 export type ExtractCommentsOptions =
   import("./index.js").ExtractCommentsOptions;
 export type ExtractCommentsFunction =
@@ -11,8 +19,13 @@ export type RawSourceMap = import("./index.js").RawSourceMap;
 export type EXPECTED_OBJECT = import("./index.js").EXPECTED_OBJECT;
 export type EXPECTED_ANY = import("./index.js").EXPECTED_ANY;
 export type ExtractedComments = string[];
-export type Task<T> = () => Promise<T>;
-export type FunctionReturning<T> = () => T;
+/**
+ * A bag of parameters: whatever a table's `name`s are, read off a query or set
+ * in `minimizerOptions`.
+ */
+export type QueryValues = {
+  [name: string]: EXPECTED_ANY;
+};
 /**
  * Minify CSS using `clean-css`.
  * @param {Input} input input
@@ -189,18 +202,6 @@ export function getEcmaVersion(
     NonNullable<import("webpack").Configuration["output"]>["environment"]
   >,
 ): number;
-/** @typedef {import("./index.js").ExtractCommentsOptions} ExtractCommentsOptions */
-/** @typedef {import("./index.js").ExtractCommentsFunction} ExtractCommentsFunction */
-/** @typedef {import("./index.js").ExtractCommentsCondition} ExtractCommentsCondition */
-/** @typedef {import("./index.js").Input} Input */
-/** @typedef {import("./index.js").MinimizedResult} MinimizedResult */
-/** @typedef {import("./index.js").CustomOptions} CustomOptions */
-/** @typedef {import("./index.js").RawSourceMap} RawSourceMap */
-/** @typedef {import("./index.js").EXPECTED_OBJECT} EXPECTED_OBJECT */
-/** @typedef {import("./index.js").EXPECTED_ANY} EXPECTED_ANY */
-/**
- * @typedef {string[]} ExtractedComments
- */
 /**
  * The options entry belonging to one minimizer: an array is parallel to the
  * implementations, a single object is shared by all of them.
@@ -434,6 +435,16 @@ export namespace napiRsImageMinify {
    */
   function filter(name: string): boolean;
 }
+/**
+ * The version a package reports. Read by walking up from its resolved entry
+ * point rather than by requiring `<name>/package.json`, which a package whose
+ * `exports` does not list that path — `sharp`, `svgo` and `imagemin` among them
+ * — makes throw. The version is part of the cache key, so failing to read one
+ * means an upgrade of that package does not invalidate what it minified.
+ * @param {string} name package name
+ * @returns {string | undefined} its version, or undefined when it is not installed
+ */
+export function packageVersion(name: string): string | undefined;
 /**
  * Minify an image using `sharp`, re-encoding it as its own format.
  * @param {Input} input input

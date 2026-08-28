@@ -46,10 +46,10 @@ CSS minimizers:
 
 Image minimizers:
 
-- [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize or rotate on the way. Requires `npm install --save-dev sharp`.
+- [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize, rotate, flip, grayscale, blur or sharpen on the way — from the options or from the asset's own name. Requires `npm install --save-dev sharp`.
 - [`svgo`](https://github.com/svg/svgo) — `MinimizerPlugin.svgoMinify`. Minifies SVG, including an `asset/inline` SVG that no `test` can match. Requires `npm install --save-dev svgo`.
 - [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin.
-- [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg. Requires `npm install --save-dev @napi-rs/image`.
+- [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg, and can resize, turn, mirror, grayscale, invert or blur on the way — from the options or from the asset's own name. Requires `npm install --save-dev @napi-rs/image`.
 
 These only minify — they never change an image's format or name; see
 [Images](#images).
@@ -1437,6 +1437,86 @@ npm install --save-dev imagemin imagemin-mozjpeg imagemin-pngquant
 > run in the webpack process rather than in the worker pool — they do their own
 > threading. Minimizers configured beside them keep the pool.
 
+#### Lossless and lossy
+
+Images are optimized in one of two modes:
+
+1. [Lossless](https://en.wikipedia.org/wiki/Lossless_compression) — the decoded
+   pixels come back identical, only the encoding is made smaller.
+2. [Lossy](https://en.wikipedia.org/wiki/Lossy_compression) — quality is traded
+   for a smaller file.
+
+**Which one you get with no `encodeOptions` at all**, measured by decoding the
+output back to pixels and comparing it with the input:
+
+| Format | `sharpMinify` | `napiRsImageMinify` |
+| ------ | ------------- | ------------------- |
+| `avif` | lossy         | lossy               |
+| `gif`  | lossy         | not handled         |
+| `jpeg` | lossy         | **lossless**        |
+| `png`  | **lossless**  | **lossless**        |
+| `tiff` | lossy         | not handled         |
+| `webp` | lossy         | lossy               |
+
+So `sharpMinify` is lossy by default everywhere except PNG — it re-encodes at
+`sharp`'s own defaults, which are quality settings rather than lossless ones.
+`napiRsImageMinify` is lossless by default for both PNG and JPEG, because those
+two are repacked in place by oxipng and mozjpeg, rewriting the encoded bytes
+rather than decoding to pixels and encoding again.
+
+`svgoMinify` rewrites markup rather than pixels. It is lossless in the sense
+that the rendered image is meant to be unchanged, but its default plugin preset
+does rewrite paths and drop metadata — see
+[`svgo`](https://github.com/svg/svgo#configuration) for which of those to turn
+off.
+
+`imageminMinify` is whatever its plugins are. `imagemin-jpegtran`,
+`imagemin-optipng` and `imagemin-gifsicle` are lossless; `imagemin-mozjpeg` and
+`imagemin-pngquant` are lossy. `imagemin-svgo` can be either.
+
+**Asking `sharpMinify` for lossless output**
+
+```js
+new MinimizerPlugin({
+  test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
+  minify: MinimizerPlugin.sharpMinify,
+  minimizerOptions: {
+    encodeOptions: {
+      // https://sharp.pixelplumbing.com/api-output
+      jpeg: { quality: 100 },
+      webp: { lossless: true },
+      avif: { lossless: true },
+      // PNG is already lossless at sharp's defaults
+      png: {},
+    },
+  },
+});
+```
+
+**Asking `napiRsImageMinify` for lossy output**, which is where the savings are:
+
+```js
+new MinimizerPlugin({
+  test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
+  minify: MinimizerPlugin.napiRsImageMinify,
+  minimizerOptions: {
+    encodeOptions: {
+      // Anything below 100 re-encodes rather than repacking
+      jpeg: { quality: 80 },
+      webp: { quality: 80 },
+      avif: { quality: 70 },
+      // `png` has no quality setting — it is lossless either way
+    },
+  },
+});
+```
+
+> **Note**
+>
+> Lossless does not mean "no smaller". On this repository's own PNG fixture
+> `napiRsImageMinify` returns 59% of the original size without touching a
+> single pixel, and `sharpMinify` returns 92%.
+
 #### `sharp`
 
 [`sharp`](https://github.com/lovell/sharp) re-encodes each image as the format
@@ -1472,21 +1552,32 @@ module.exports = {
 };
 ```
 
-`sharp` can also resize and rotate while it re-encodes:
+`sharp` can also transform the image while it re-encodes:
 
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g)$/i,
   minify: MinimizerPlugin.sharpMinify,
   minimizerOptions: {
-    // `unit` is "px" (default) or "percent"
-    resize: { width: 800, unit: "px" },
+    // `enabled` and `unit` ("px" by default, or "percent") are read here;
+    // everything else goes to sharp
+    // https://sharp.pixelplumbing.com/api-resize
+    resize: { width: 800, unit: "px", fit: "inside" },
     // A number of degrees, or "auto" to follow the EXIF orientation
     rotate: "auto",
+    flip: false,
+    flop: false,
+    grayscale: false,
+    // A sigma, or true for a fast default
+    blur: false,
+    sharpen: false,
     encodeOptions: { jpeg: { quality: 80 } },
   },
 });
 ```
+
+Each of these can also be asked for by an asset's own name — see
+[Query strings in asset names](#query-strings-in-asset-names).
 
 #### `svgo`
 
@@ -1610,6 +1701,144 @@ module.exports = {
 >
 > `png` is recompressed losslessly, so it takes no quality setting. Resizing
 > and rotating are not exposed here — use [`sharp`](#sharp) for those.
+
+#### Query strings in asset names
+
+An asset keeps the query and fragment of the request that made it:
+`output.assetModuleFilename` is `[hash][ext][query][fragment]` by default, so
+`import icon from "./icon.svg?v=2"` is emitted as `<hash>.svg?v=2`.
+
+`test`, `include` and `exclude` are read against both spellings — the whole name
+and the name with the query and fragment stripped — so all three of these accept
+that asset:
+
+```js
+test: /\.svg$/i; // names the file
+test: /\.svg(\?.*)?$/i; // names the query form
+test: /\?v=2$/; // names the query itself
+```
+
+`exclude` rejects on either spelling, so excluding by file name also excludes
+the queried asset. Every built-in minimizer's own `filter` reads past the query
+in the same way.
+
+**Asking sharp for something from the import.** `sharpMinify` reads what to do
+off the asset's name, so one image can be sized, turned or re-encoded where it
+is imported rather than in the configuration:
+
+```js
+import banner from "./banner.png?width=320&quality=80";
+```
+
+| Query                 | Short  | Value                                         | What it does                                 |
+| --------------------- | ------ | --------------------------------------------- | -------------------------------------------- |
+| `width`               | `w`    | pixels, or `auto`                             | target width                                 |
+| `height`              | `h`    | pixels, or `auto`                             | target height                                |
+| `unit`                | `u`    | `px` (default) or `percent`                   | how `width` and `height` are read            |
+| `fit`                 |        | `cover` (default), `contain`, `fill`, …       | what to do when both dimensions are given    |
+| `position`            | `pos`  | `centre` (default), `right top`, `entropy`, … | where to crop from                           |
+| `background`          | `bg`   | a colour                                      | what `contain` pads with                     |
+| `without-enlargement` |        | flag                                          | never scale the image up                     |
+| `rotate`              | `rot`  | degrees, or `auto`                            | turn by an angle, or by the EXIF orientation |
+| `flip`                |        | flag                                          | mirror vertically                            |
+| `flop`                |        | flag                                          | mirror horizontally                          |
+| `grayscale`           | `gray` | flag                                          | drop the colour                              |
+| `blur`                |        | sigma, or flag                                | blur                                         |
+| `sharpen`             |        | sigma, or flag                                | sharpen                                      |
+| `quality`             | `q`    | a number                                      | encode quality                               |
+| `lossless`            |        | flag                                          | encode losslessly, where the format has one  |
+| `effort`              |        | a number                                      | how hard the encoder tries                   |
+| `progressive`         | `prog` | flag                                          | interlace, where the format has it           |
+
+| Import                                        | What comes out                                 |
+| --------------------------------------------- | ---------------------------------------------- |
+| `./photo.jpg?w=64&h=64&fit=cover&pos=entropy` | a 64x64 thumbnail, cropped to the busiest part |
+| `./photo.jpg?width=16&blur&quality=30`        | a tiny blurred placeholder                     |
+| `./logo.png?width=50&unit=percent&grayscale`  | half-size and grey                             |
+
+A **flag** is on when it is present — `?flip` — and reads `true`/`1`/`yes` the
+same way, `false`/`0`/`no` the other. `greyscale` and `grey` spell `grayscale`,
+`auto` on `width` or `height` drops one set in `minimizerOptions`, and a
+parameter can be spelled in any case.
+
+Every one of these can also be set in `minimizerOptions`; the name wins where
+both say something, being the more specific of the two. `resize: { enabled:
+false }` still turns resizing off entirely.
+
+Two rules decide what happens to a value:
+
+- **Its shape is checked here, and anything else is ignored.** An asset's name
+  carries queries this plugin never put there, so `?v=2` must not become a
+  resize — and neither does `?width=nonsense` or `?flip=maybe`.
+- **Whether a well-formed value is one sharp accepts is sharp's to report**, and
+  it answers per format: `effort` runs to 6 for webp and 9 for avif, `quality`
+  starts at 0 for png and 1 for jpeg, and a colour is whatever it can parse. A
+  value outside those fails the build with sharp's own message rather than being
+  dropped silently. An option a format has no use for — `?lossless` on a jpeg —
+  is simply ignored.
+
+**`napiRsImageMinify` reads the same names**, as far as `@napi-rs/image` goes:
+`width`/`w`, `height`/`h`, `fit` (`cover`, `fill`, `inside`), `filter`
+(`nearest`, `triangle`, `catmull-rom`, `gaussian`, `lanczos3`), `rotate`/`rot`,
+`flip`, `flop`, `grayscale`, `invert`, `blur`, `quality`/`q`, `lossless` and
+`speed`. Three differences are worth knowing:
+
+- **`rotate` takes a quarter turn**, not any angle — `90`, `180`, `270`, a
+  negative or a multiple of those, or `auto` for the EXIF orientation. napi
+  applies one orientation, so mirroring and a turn compose into it (`?flip&flop`
+  is a half turn); asking for `auto` alongside an explicit turn warns, because
+  only one of them can be applied.
+- **Every value is checked here**, rather than left to the library as sharp's
+  are. napi rejects an unknown `fit` without naming it, and answers a quality of
+  150 by silently writing a _bigger_ file, so a value it would mishandle is
+  dropped instead.
+- **Transforming costs the repack.** This minimizer's advantage is rewriting
+  encoded bytes — oxipng saves 99% of a png where decoding and re-encoding saves
+  9% — so when a query makes a transform necessary, its output is handed back to
+  the repack rather than replacing it. A `?rotate=auto` on an image whose EXIF
+  asks for nothing skips the decode entirely.
+
+**`svgoMinify` reads `precision`** (or `floatPrecision`, 0–10), **`multipass`**,
+**`pretty`** and **`indent`**, so one SVG can be laid out readably or coarsened
+without a second configuration:
+
+```js
+import icon from "./icon.svg?precision=1";
+```
+
+**`imageminMinify` reads nothing.** Its options are a list of already-configured
+plugins, each with option names of its own, so there is no parameter a query
+could set that would mean the same thing twice over.
+
+> **Note**
+>
+> Two assets whose names differ only by their query would be written to the same
+> file, and webpack refuses that. To emit several sizes of one image, give each
+> its own file name **and** keep the query on the asset name:
+>
+> ```js
+> module.exports = {
+>   output: {
+>     assetModuleFilename: (pathData) => {
+>       const query = pathData.module.resourceResolveData.query || "";
+>       const name = query.replace(/^\?/, "-").replace(/[=&]/g, "-");
+>
+>       return `[name]${name}[ext][query]`;
+>     },
+>   },
+> };
+> ```
+>
+> Without the trailing `[query]` the size is no longer on the name and nothing
+> resizes; without the first half the two sizes collide.
+
+> **Note**
+>
+> A query cannot pick a **format** here. `?as=webp` is read by
+> [`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)'s
+> loader, which sees the import before an asset exists and can emit a different
+> file for it. Resizing needs no new name, which is why it works here; changing
+> the format does, and this plugin runs after names are decided.
 
 #### Images beside everything else
 
