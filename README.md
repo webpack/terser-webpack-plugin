@@ -1691,6 +1691,37 @@ module.exports = {
 > `png` is recompressed losslessly, so it takes no quality setting. Resizing
 > and rotating are not exposed here — use [`sharp`](#sharp) for those.
 
+#### Query strings in asset names
+
+An asset keeps the query and fragment of the request that made it:
+`output.assetModuleFilename` is `[hash][ext][query][fragment]` by default, so
+`import icon from "./icon.svg?v=2"` is emitted as `<hash>.svg?v=2`.
+
+`test`, `include` and `exclude` are read against both spellings — the whole name
+and the name with the query and fragment stripped — so all three of these accept
+that asset:
+
+```js
+test: /\.svg$/i; // names the file
+test: /\.svg(\?.*)?$/i; // names the query form
+test: /\?v=2$/; // names the query itself
+```
+
+`exclude` rejects on either spelling, so excluding by file name also excludes
+the queried asset. Every built-in minimizer's own `filter` reads past the query
+in the same way.
+
+> **Note**
+>
+> A query cannot **configure** a minimizer here. `?as=webp`, `?width=100` and
+> the like are read by
+> [`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)'s
+> loader, which sees the import before an asset exists and can therefore emit a
+> different file for it. This plugin runs after the assets are built, where
+> there is no import left to read and no way to rename what it produces — so a
+> query here only ever names an asset, it never changes what a minimizer does to
+> it. Per-image settings belong in that plugin.
+
 #### Images beside everything else
 
 `minify` takes an array, and each minimizer is offered only the assets its own
