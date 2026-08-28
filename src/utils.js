@@ -2167,6 +2167,127 @@ sharpMinify.supportsWorkerThreads = () => false;
 sharpMinify.filter = (name) => SHARP_MINIFY_FORMATS.has(extensionOf(name));
 
 /**
+ * Which encoder each extension names. Only the four `@napi-rs/image` both reads
+ * back reliably and makes smaller: `bmp` is uncompressed so re-encoding gains
+ * nothing, `tiff` and `ico` fail to decode what other encoders write, and
+ * `heic` encoding exists only on macOS and Windows.
+ * @type {Map<string, string>}
+ */
+const NAPI_RS_IMAGE_FORMATS = new Map([
+  ["avif", "avif"],
+  ["jpeg", "jpeg"],
+  ["jpg", "jpeg"],
+  ["png", "png"],
+  ["webp", "webp"],
+]);
+
+/**
+ * How each format is re-encoded as itself. PNG and JPEG are rewritten in place
+ * from their encoded bytes — going through `Transformer` decodes them to
+ * pixels instead and saves a fraction as much, 9% against oxipng's 99% on this
+ * repository's own fixture.
+ * @type {Map<string, (image: EXPECTED_ANY, input: Buffer, options: EXPECTED_OBJECT) => Promise<Buffer>>}
+ */
+const NAPI_RS_IMAGE_ENCODERS = new Map([
+  [
+    "avif",
+    (image, input, options) => new image.Transformer(input).avif(options),
+  ],
+  ["jpeg", (image, input, options) => image.compressJpeg(input, options)],
+  ["png", (image, input, options) => image.losslessCompressPng(input, options)],
+  // The one whose options are a bare quality factor rather than an object.
+  [
+    "webp",
+    (image, input, options) =>
+      new image.Transformer(input).webp(
+        /** @type {{ quality?: number }} */ (options).quality,
+      ),
+  ],
+]);
+
+/* istanbul ignore next */
+/**
+ * Minify an image using `@napi-rs/image`, re-encoding it as the format its name
+ * already claims.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
+  /**
+   * @typedef {object} NapiRsImageMinifyOptions
+   * @property {{ [format: string]: EXPECTED_OBJECT }=} encodeOptions per-format options, keyed by the format's own name — `avif`, `jpeg`, `png`, `webp`
+   */
+  const [[name, code]] = Object.entries(input);
+  const format = NAPI_RS_IMAGE_FORMATS.get(extensionOf(name));
+
+  // `filter` offers only what the map holds, so a name reaching here without
+  // one came from a caller that dispatched by something else.
+  if (typeof format === "undefined") {
+    return { code };
+  }
+
+  const { encodeOptions } = /** @type {NapiRsImageMinifyOptions} */ (
+    minimizerOptions || {}
+  );
+
+  const image = require("@napi-rs/image");
+
+  const encode =
+    /** @type {NonNullable<ReturnType<typeof NAPI_RS_IMAGE_ENCODERS.get>>} */
+    (NAPI_RS_IMAGE_ENCODERS.get(format));
+
+  return {
+    code: await encode(
+      image,
+      toBuffer(code),
+      (encodeOptions && encodeOptions[format]) || {},
+    ),
+  };
+}
+
+/**
+ * @returns {string | undefined} the minimizer version
+ */
+napiRsImageMinify.getMinimizerVersion = () => {
+  let packageJson;
+
+  try {
+    packageJson = require("@napi-rs/image/package.json");
+  } catch (_err) {
+    // Ignore
+  }
+
+  return packageJson && packageJson.version;
+};
+
+/**
+ * The asset reaches this one as bytes rather than as text.
+ * @returns {boolean} true, images are binary
+ */
+napiRsImageMinify.supportsBinary = () => true;
+
+/**
+ * A native addon whose input cannot cross the worker boundary as text, so it
+ * stays in process; its own codecs thread underneath.
+ * @returns {boolean} false
+ */
+napiRsImageMinify.supportsWorker = () => false;
+
+/**
+ * @returns {boolean} false
+ */
+napiRsImageMinify.supportsWorkerThreads = () => false;
+
+/**
+ * @param {string} name asset name
+ * @returns {boolean} true if `@napi-rs/image` can re-encode `name` as its own format
+ */
+napiRsImageMinify.filter = (name) =>
+  NAPI_RS_IMAGE_FORMATS.has(extensionOf(name));
+
+/**
  * Resolve the `plugins` entry of an `imagemin` configuration to the plugin
  * functions it names, importing each one.
  * @param {EXPECTED_OBJECT=} imageminConfig imagemin configuration
@@ -2409,6 +2530,7 @@ module.exports = {
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
+  napiRsImageMinify,
   sharpMinify,
   svgoMinify,
   swcMinify,

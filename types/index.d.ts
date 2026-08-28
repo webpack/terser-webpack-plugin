@@ -122,6 +122,7 @@ declare namespace TerserPlugin {
     swcMinifyCss,
     imageminMinify,
     imageminNormalizeConfig,
+    napiRsImageMinify,
     sharpMinify,
     svgoMinify,
     Schema,
@@ -179,6 +180,7 @@ import { lightningCssMinify } from "./utils";
 import { swcMinifyCss } from "./utils";
 import { imageminMinify } from "./utils";
 import { imageminNormalizeConfig } from "./utils";
+import { napiRsImageMinify } from "./utils";
 import { sharpMinify } from "./utils";
 import { svgoMinify } from "./utils";
 type Schema = import("schema-utils/declarations/validate").Schema;

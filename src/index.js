@@ -17,6 +17,7 @@ const {
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
+  napiRsImageMinify,
   sharpMinify,
   svgoMinify,
   swcMinify,
@@ -1374,6 +1375,7 @@ TerserPlugin.lightningCssMinify = lightningCssMinify;
 TerserPlugin.swcMinifyCss = swcMinifyCss;
 TerserPlugin.imageminMinify = imageminMinify;
 TerserPlugin.imageminNormalizeConfig = imageminNormalizeConfig;
+TerserPlugin.napiRsImageMinify = napiRsImageMinify;
 TerserPlugin.sharpMinify = sharpMinify;
 TerserPlugin.svgoMinify = svgoMinify;
 

@@ -396,6 +396,45 @@ export namespace minifyHtmlNode {
   function filter(name: string): boolean;
 }
 /**
+ * Minify an image using `@napi-rs/image`, re-encoding it as the format its name
+ * already claims.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+export function napiRsImageMinify(
+  input: Input,
+  sourceMap?: RawSourceMap | undefined,
+  minimizerOptions?: CustomOptions | undefined,
+): Promise<MinimizedResult>;
+export namespace napiRsImageMinify {
+  /**
+   * @returns {string | undefined} the minimizer version
+   */
+  function getMinimizerVersion(): string | undefined;
+  /**
+   * The asset reaches this one as bytes rather than as text.
+   * @returns {boolean} true, images are binary
+   */
+  function supportsBinary(): boolean;
+  /**
+   * A native addon whose input cannot cross the worker boundary as text, so it
+   * stays in process; its own codecs thread underneath.
+   * @returns {boolean} false
+   */
+  function supportsWorker(): boolean;
+  /**
+   * @returns {boolean} false
+   */
+  function supportsWorkerThreads(): boolean;
+  /**
+   * @param {string} name asset name
+   * @returns {boolean} true if `@napi-rs/image` can re-encode `name` as its own format
+   */
+  function filter(name: string): boolean;
+}
+/**
  * Minify an image using `sharp`, re-encoding it as its own format.
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map (ignored for images)
