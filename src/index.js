@@ -414,6 +414,38 @@ class TerserPlugin {
     const cache = compilation.getCache("TerserWebpackPlugin");
     let numberOfAssets = 0;
 
+    const { matchPart } = compiler.webpack.ModuleFilenameHelpers;
+    /**
+     * Whether `test`, `include` and `exclude` accept an asset.
+     *
+     * An asset name carries the query and fragment of the request that made it
+     * — `output.assetModuleFilename` is `[hash][ext][query][fragment]` by
+     * default — so `test: /\.png$/` would match none of them. Both spellings
+     * are offered: a rule naming the file accepts it whatever it carries, and
+     * one naming the query still works.
+     * @param {string} name asset name
+     * @returns {boolean} true when the asset is to be minified
+     */
+    const matchesName = (name) => {
+      const bare = name.replace(/[?#].*$/, "");
+      const { test, include, exclude } = this.options;
+
+      if (test && !matchPart(name, test) && !matchPart(bare, test)) {
+        return false;
+      }
+
+      if (include && !matchPart(name, include) && !matchPart(bare, include)) {
+        return false;
+      }
+
+      // Rejecting on either spelling, so naming the file excludes it whatever
+      // it carries and naming the query still excludes it.
+      return !(
+        exclude &&
+        (matchPart(name, exclude) || matchPart(bare, exclude))
+      );
+    };
+
     // Normalize the implementation list to an array so dispatch and the
     // worker-pool capability checks below can iterate uniformly. The
     // original shape on `this.options.minimizer.implementation` is preserved
@@ -464,12 +496,7 @@ class TerserPlugin {
             return false;
           }
 
-          if (
-            !compiler.webpack.ModuleFilenameHelpers.matchObject.bind(
-              undefined,
-              this.options,
-            )(name)
-          ) {
+          if (!matchesName(name)) {
             return false;
           }
 
