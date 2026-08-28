@@ -12,6 +12,52 @@
  * @typedef {string[]} ExtractedComments
  */
 
+const path = require("path");
+
+/**
+ * The version a package reports. Read by walking up from its resolved entry
+ * point rather than by requiring `<name>/package.json`, which a package whose
+ * `exports` does not list that path — `sharp`, `svgo` and `imagemin` among them
+ * — makes throw. The version is part of the cache key, so failing to read one
+ * means an upgrade of that package does not invalidate what it minified.
+ * @param {string} name package name
+ * @returns {string | undefined} its version, or undefined when it is not installed
+ */
+function packageVersion(name) {
+  let directory;
+
+  try {
+    // Resolved to an absolute path so the walk below cannot turn a directory
+    // into a bare specifier, which is what a core module's name resolves to.
+    directory = path.dirname(path.resolve(require.resolve(name)));
+  } catch (_err) {
+    return undefined;
+  }
+
+  // `require.resolve` can land several directories deep inside the package.
+  for (;;) {
+    let packageJson;
+
+    try {
+      packageJson = require(path.join(directory, "package.json"));
+    } catch (_err) {
+      // Not this directory; keep walking.
+    }
+
+    if (packageJson && packageJson.name === name) {
+      return packageJson.version;
+    }
+
+    const parent = path.dirname(directory);
+
+    if (parent === directory) {
+      return undefined;
+    }
+
+    directory = parent;
+  }
+}
+
 /**
  * The options entry belonging to one minimizer: an array is parallel to the
  * implementations, a single object is shared by all of them.
@@ -390,17 +436,7 @@ async function terserMinify(
 /**
  * @returns {string | undefined} the minimizer version
  */
-terserMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("terser/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+terserMinify.getMinimizerVersion = () => packageVersion("terser");
 
 /**
  * @returns {boolean | undefined} true if worker thread is supported, false otherwise
@@ -638,17 +674,7 @@ async function uglifyJsMinify(
 /**
  * @returns {string | undefined} the minimizer version
  */
-uglifyJsMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("uglify-js/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+uglifyJsMinify.getMinimizerVersion = () => packageVersion("uglify-js");
 
 /**
  * @returns {boolean | undefined} true if worker thread is supported, false otherwise
@@ -883,17 +909,7 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-swcMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("@swc/core/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+swcMinify.getMinimizerVersion = () => packageVersion("@swc/core");
 
 /**
  * @returns {boolean | undefined} true if worker thread is supported, false otherwise
@@ -1012,17 +1028,7 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-esbuildMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("esbuild/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+esbuildMinify.getMinimizerVersion = () => packageVersion("esbuild");
 
 /**
  * @returns {boolean | undefined} true if worker thread is supported, false otherwise
@@ -1132,17 +1138,8 @@ async function htmlMinifierTerser(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-htmlMinifierTerser.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("html-minifier-terser/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+htmlMinifierTerser.getMinimizerVersion = () =>
+  packageVersion("html-minifier-terser");
 
 /**
  * @returns {boolean | undefined} true if worker threads are supported
@@ -1193,17 +1190,7 @@ async function minifyHtmlNode(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-minifyHtmlNode.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("@minify-html/node/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+minifyHtmlNode.getMinimizerVersion = () => packageVersion("@minify-html/node");
 
 /**
  * @returns {boolean | undefined} false because `@minify-html/node` is a native binding
@@ -1277,17 +1264,7 @@ async function swcMinifyHtml(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-swcMinifyHtml.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("@swc/html/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+swcMinifyHtml.getMinimizerVersion = () => packageVersion("@swc/html");
 
 /**
  * @returns {boolean | undefined} false because `@swc/html` is a native binding
@@ -1345,17 +1322,7 @@ async function swcMinifyHtmlFragment(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-swcMinifyHtmlFragment.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("@swc/html/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+swcMinifyHtmlFragment.getMinimizerVersion = () => packageVersion("@swc/html");
 
 /**
  * @returns {boolean | undefined} false because `@swc/html` is a native binding
@@ -1509,17 +1476,7 @@ async function cssnanoMinify(
 /**
  * @returns {string | undefined} the minimizer version
  */
-cssnanoMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("cssnano/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+cssnanoMinify.getMinimizerVersion = () => packageVersion("cssnano");
 
 /**
  * @returns {boolean | undefined} true if worker threads are supported
@@ -1577,17 +1534,7 @@ async function cssoMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-cssoMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("csso/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+cssoMinify.getMinimizerVersion = () => packageVersion("csso");
 
 /**
  * @returns {boolean | undefined} true if worker threads are supported
@@ -1663,17 +1610,7 @@ async function cleanCssMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-cleanCssMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("clean-css/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+cleanCssMinify.getMinimizerVersion = () => packageVersion("clean-css");
 
 /**
  * @returns {boolean | undefined} true if worker threads are supported
@@ -1792,17 +1729,7 @@ async function esbuildMinifyCss(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-esbuildMinifyCss.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("esbuild/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+esbuildMinifyCss.getMinimizerVersion = () => packageVersion("esbuild");
 
 /**
  * @returns {boolean | undefined} false because `esbuild` is a native binding
@@ -1875,17 +1802,7 @@ async function lightningCssMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-lightningCssMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("lightningcss/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+lightningCssMinify.getMinimizerVersion = () => packageVersion("lightningcss");
 
 /**
  * @returns {boolean | undefined} false because `lightningcss` is a native binding
@@ -1973,17 +1890,7 @@ async function swcMinifyCss(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-swcMinifyCss.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("@swc/css/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+swcMinifyCss.getMinimizerVersion = () => packageVersion("@swc/css");
 
 /**
  * @returns {boolean | undefined} false because `@swc/css` is a native binding
@@ -2192,17 +2099,7 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-sharpMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("sharp/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+sharpMinify.getMinimizerVersion = () => packageVersion("sharp");
 
 /**
  * The asset reaches this one as bytes rather than as text.
@@ -2312,17 +2209,7 @@ async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-napiRsImageMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("@napi-rs/image/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+napiRsImageMinify.getMinimizerVersion = () => packageVersion("@napi-rs/image");
 
 /**
  * The asset reaches this one as bytes rather than as text.
@@ -2449,17 +2336,7 @@ async function imageminMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-imageminMinify.getMinimizerVersion = () => {
-  let packageJson;
-
-  try {
-    packageJson = require("imagemin/package.json");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return packageJson && packageJson.version;
-};
+imageminMinify.getMinimizerVersion = () => packageVersion("imagemin");
 
 /**
  * The asset reaches this one as bytes rather than as text.
@@ -2516,19 +2393,7 @@ async function svgoMinify(input, sourceMap, minimizerOptions) {
 /**
  * @returns {string | undefined} the minimizer version
  */
-svgoMinify.getMinimizerVersion = () => {
-  let svgo;
-
-  try {
-    // `svgo` states its own version; its `package.json` is not an export.
-    // eslint-disable-next-line import/no-unresolved
-    svgo = require("svgo");
-  } catch (_err) {
-    // Ignore
-  }
-
-  return svgo && svgo.VERSION;
-};
+svgoMinify.getMinimizerVersion = () => packageVersion("svgo");
 
 /**
  * @returns {boolean} true
@@ -2593,6 +2458,7 @@ module.exports = {
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  packageVersion,
   sharpMinify,
   svgoMinify,
   swcMinify,

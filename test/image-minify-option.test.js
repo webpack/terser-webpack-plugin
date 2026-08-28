@@ -535,3 +535,18 @@ describe("image minify option", () => {
     );
   });
 });
+
+describe("the image minimizers' versions", () => {
+  // `sharp`, `svgo` and `imagemin` do not list `./package.json` in their
+  // `exports`, so requiring it throws and the version used to read as
+  // undefined: every build then hashed the same "0.0.0" whichever version was
+  // installed, and upgrading one did not invalidate what it had minified.
+  it.each([
+    ["sharpMinify", MinimizerPlugin.sharpMinify],
+    ["svgoMinify", MinimizerPlugin.svgoMinify],
+    ["imageminMinify", MinimizerPlugin.imageminMinify],
+    ["napiRsImageMinify", MinimizerPlugin.napiRsImageMinify],
+  ])("should be what %s reports", (_name, minimizer) => {
+    expect(minimizer.getMinimizerVersion()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
