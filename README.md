@@ -1437,6 +1437,86 @@ npm install --save-dev imagemin imagemin-mozjpeg imagemin-pngquant
 > run in the webpack process rather than in the worker pool — they do their own
 > threading. Minimizers configured beside them keep the pool.
 
+#### Lossless and lossy
+
+Images are optimized in one of two modes:
+
+1. [Lossless](https://en.wikipedia.org/wiki/Lossless_compression) — the decoded
+   pixels come back identical, only the encoding is made smaller.
+2. [Lossy](https://en.wikipedia.org/wiki/Lossy_compression) — quality is traded
+   for a smaller file.
+
+**Which one you get with no `encodeOptions` at all**, measured by decoding the
+output back to pixels and comparing it with the input:
+
+| Format | `sharpMinify` | `napiRsImageMinify` |
+| ------ | ------------- | ------------------- |
+| `avif` | lossy         | lossy               |
+| `gif`  | lossy         | not handled         |
+| `jpeg` | lossy         | **lossless**        |
+| `png`  | **lossless**  | **lossless**        |
+| `tiff` | lossy         | not handled         |
+| `webp` | lossy         | lossy               |
+
+So `sharpMinify` is lossy by default everywhere except PNG — it re-encodes at
+`sharp`'s own defaults, which are quality settings rather than lossless ones.
+`napiRsImageMinify` is lossless by default for both PNG and JPEG, because those
+two are repacked in place by oxipng and mozjpeg, rewriting the encoded bytes
+rather than decoding to pixels and encoding again.
+
+`svgoMinify` rewrites markup rather than pixels. It is lossless in the sense
+that the rendered image is meant to be unchanged, but its default plugin preset
+does rewrite paths and drop metadata — see
+[`svgo`](https://github.com/svg/svgo#configuration) for which of those to turn
+off.
+
+`imageminMinify` is whatever its plugins are. `imagemin-jpegtran`,
+`imagemin-optipng` and `imagemin-gifsicle` are lossless; `imagemin-mozjpeg` and
+`imagemin-pngquant` are lossy. `imagemin-svgo` can be either.
+
+**Asking `sharpMinify` for lossless output**
+
+```js
+new MinimizerPlugin({
+  test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
+  minify: MinimizerPlugin.sharpMinify,
+  minimizerOptions: {
+    encodeOptions: {
+      // https://sharp.pixelplumbing.com/api-output
+      jpeg: { quality: 100 },
+      webp: { lossless: true },
+      avif: { lossless: true },
+      // PNG is already lossless at sharp's defaults
+      png: {},
+    },
+  },
+});
+```
+
+**Asking `napiRsImageMinify` for lossy output**, which is where the savings are:
+
+```js
+new MinimizerPlugin({
+  test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
+  minify: MinimizerPlugin.napiRsImageMinify,
+  minimizerOptions: {
+    encodeOptions: {
+      // Anything below 100 re-encodes rather than repacking
+      jpeg: { quality: 80 },
+      webp: { quality: 80 },
+      avif: { quality: 70 },
+      // `png` has no quality setting — it is lossless either way
+    },
+  },
+});
+```
+
+> **Note**
+>
+> Lossless does not mean "no smaller". On this repository's own PNG fixture
+> `napiRsImageMinify` returns 59% of the original size without touching a
+> single pixel, and `sharpMinify` returns 92%.
+
 #### `sharp`
 
 [`sharp`](https://github.com/lovell/sharp) re-encodes each image as the format
