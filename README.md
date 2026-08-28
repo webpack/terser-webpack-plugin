@@ -49,6 +49,7 @@ Image minimizers:
 - [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize or rotate on the way. Requires `npm install --save-dev sharp`.
 - [`svgo`](https://github.com/svg/svgo) — `MinimizerPlugin.svgoMinify`. Minifies SVG, including an `asset/inline` SVG that no `test` can match. Requires `npm install --save-dev svgo`.
 - [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin.
+- [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg. Requires `npm install --save-dev @napi-rs/image`.
 
 These only minify — they never change an image's format or name; see
 [Images](#images).
@@ -1558,6 +1559,57 @@ module.exports = {
 > A plugin that converts — `imagemin-webp`, `imagemin-avif` — writes a format
 > the asset's name does not claim. `imageminMinify` keeps the original and
 > warns instead of writing it, since it cannot rename the asset.
+
+#### `@napi-rs/image`
+
+[`@napi-rs/image`](https://github.com/Brooooooklyn/Image) is a set of Rust
+codecs shipped as prebuilt binaries, so it needs no system library. It handles
+`avif`, `jpeg`, `png` and `webp` — the formats it both reads back reliably and
+makes smaller.
+
+Each format is re-encoded as itself, using the codec that does that best:
+`png` goes through [oxipng](https://github.com/shssoichiro/oxipng), which
+rewrites the container losslessly and leaves the pixels untouched, and `jpeg`
+through [mozjpeg](https://github.com/mozilla/mozjpeg). Decoding either to
+pixels and re-encoding saves a small fraction as much.
+
+**webpack.config.js**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      "...",
+      new MinimizerPlugin({
+        test: /\.(png|jpe?g|webp|avif)$/i,
+        minify: MinimizerPlugin.napiRsImageMinify,
+        minimizerOptions: {
+          // Options are keyed by the format's own name
+          // https://github.com/Brooooooklyn/Image#usage
+          encodeOptions: {
+            // `PNGLosslessOptions`
+            png: { force: true },
+            // `JpegCompressOptions`
+            jpeg: { quality: 80 },
+            // `AvifConfig`
+            avif: { quality: 70, speed: 4 },
+            // The quality factor, 0-100
+            webp: { quality: 80 },
+          },
+        },
+      }),
+    ],
+  },
+};
+```
+
+> **Note**
+>
+> `png` is recompressed losslessly, so it takes no quality setting. Resizing
+> and rotating are not exposed here — use [`sharp`](#sharp) for those.
 
 #### Images beside everything else
 

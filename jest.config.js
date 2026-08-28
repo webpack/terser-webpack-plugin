@@ -32,7 +32,7 @@ const RUN_EMBEDDED_TESTS = (() => {
 // `imagemin` is ESM-only. Asked of the packages rather than of the version
 // string, the same way the embedded-source check is. Named through variables
 // so they are resolved at call time rather than by the import linter.
-const IMAGE_MINIMIZER_PACKAGES = ["sharp", "svgo"];
+const IMAGE_MINIMIZER_PACKAGES = ["@napi-rs/image", "sharp", "svgo"];
 const HAS_IMAGE_MINIMIZER_PACKAGES = IMAGE_MINIMIZER_PACKAGES.every((name) => {
   try {
     require(name);

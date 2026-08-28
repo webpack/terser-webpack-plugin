@@ -92,6 +92,84 @@ describe("image minify option", () => {
     ).toBe("png");
   });
 
+  it("should work when the `minify` option is `napiRsImageMinify`", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({
+      test: /\.(png|jpe?g)$/i,
+      minify: MinimizerPlugin.napiRsImageMinify,
+      minimizerOptions: { encodeOptions: { jpeg: { quality: 75 } } },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toEqual([]);
+
+    for (const [name, ext] of [
+      ["image.png", "png"],
+      ["image.jpg", "jpg"],
+    ]) {
+      const bytes = readBytes(compiler, stats, name);
+
+      expect(fileTypeFromBuffer(bytes).ext).toBe(ext);
+      expect(bytes.length).toBeLessThan(fixtureSize(name));
+    }
+
+    // Untouched: `filter` declines the formats it cannot read back.
+    expect(readBytes(compiler, stats, "image.svg")).toHaveLength(
+      fixtureSize("image.svg"),
+    );
+  });
+
+  it("should recompress PNG losslessly with `napiRsImageMinify`", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({
+      test: /\.png$/i,
+      minify: MinimizerPlugin.napiRsImageMinify,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+
+    const sharp = require("sharp");
+
+    const before = await sharp(path.resolve(__dirname, "fixtures/image.png"))
+      .raw()
+      .toBuffer();
+    const after = await sharp(readBytes(compiler, stats, "image.png"))
+      .raw()
+      .toBuffer();
+
+    // oxipng rewrites the container, never the pixels.
+    expect(after.equals(before)).toBe(true);
+  });
+
+  it("should decline a format `napiRsImageMinify` cannot re-encode", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    // `tiff` reaches the minimizer only past `filter`, so ask it directly.
+    const result = await MinimizerPlugin.napiRsImageMinify({
+      "image.tiff": Buffer.from("not really a tiff"),
+    });
+
+    expect(result.code.toString()).toBe("not really a tiff");
+    expect(MinimizerPlugin.napiRsImageMinify.filter("image.tiff")).toBe(false);
+
+    compiler.close(() => {});
+  });
+
   it("should work when the `minify` option is `svgoMinify`", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/images.js"),
