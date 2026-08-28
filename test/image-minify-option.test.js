@@ -1104,7 +1104,9 @@ describe("what an asset's name asks svgo for", () => {
     ["?pretty&indent=2", "  <path"],
     ["?pretty&indent=0", "<path"],
   ])("should lay the output out for %s", async (query, indented) => {
-    expect((await minified(query)).split("\n")[1]).toBe(
+    // Split on either ending: `.gitattributes` normalizes the checkout per
+    // platform, so what a line ends with is not what this is testing.
+    expect((await minified(query)).split(/\r?\n/)[1]).toBe(
       `${indented} fill="red" d="m1.235 2.346 49.753 57.777Z"/>`,
     );
   });
@@ -1186,7 +1188,7 @@ describe("what an asset's name asks svgo for", () => {
   it("should keep an `encodeOptions.js2svg` the query does not speak for", async () => {
     const configured = { encodeOptions: { js2svg: { indent: 3 } } };
 
-    expect((await minified("?pretty", configured)).split("\n")[1]).toMatch(
+    expect((await minified("?pretty", configured)).split(/\r?\n/)[1]).toMatch(
       /^ {3}<path/,
     );
   });
