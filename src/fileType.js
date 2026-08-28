@@ -4,8 +4,11 @@
  * Only what an image minimizer can be handed or can write: `imageminMinify`
  * compares an asset's extension against the format its plugins produced, so a
  * format no such plugin emits could never change the answer. An unrecognized
- * buffer names nothing, which is also how a format with no signature at all —
- * SVG — reads.
+ * buffer names nothing.
+ *
+ * SVG has no signature, so it is read as the markup it is. Leaving it out
+ * would make "not SVG" and "not recognized" the same answer, and a conversion
+ * into SVG would then pass for an unchanged image.
  */
 
 /**
@@ -16,7 +19,10 @@
 const CANONICAL_EXTENSION = new Map([
   ["apng", "png"],
   ["heif", "heic"],
+  ["j2c", "jp2"],
+  ["j2k", "jp2"],
   ["jpeg", "jpg"],
+  ["jpx", "jp2"],
   ["tif", "tiff"],
 ]);
 
@@ -79,6 +85,97 @@ function hasText(buffer, text, offset = 0) {
   }
 
   return true;
+}
+
+/**
+ * @param {Uint8Array} buffer the bytes
+ * @param {string} text the ASCII to match, in lower case
+ * @param {number} offset where to match it
+ * @returns {boolean} true when it is there in either case
+ */
+function hasTextIgnoringCase(buffer, text, offset) {
+  for (let i = 0; i < text.length; i++) {
+    if ((buffer[i + offset] | 0x20) !== text.charCodeAt(i)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+const WHITESPACE = new Set([0x09, 0x0a, 0x0c, 0x0d, 0x20]);
+const BYTE_ORDER_MARK = [0xef, 0xbb, 0xbf];
+// A prolog, a doctype and comments can all precede the root element. Bounded
+// so a large file is not walked to answer a question its first line settles.
+const MARKUP_SCAN_LIMIT = 1024;
+
+/**
+ * @param {Uint8Array} buffer the bytes
+ * @param {string} text the ASCII that ends the construct
+ * @param {number} from where to start looking
+ * @param {number} limit how far to look
+ * @returns {number} the index past it, or the limit when it does not end
+ */
+function endOf(buffer, text, from, limit) {
+  for (let at = from; at < limit; at++) {
+    if (hasText(buffer, text, at)) {
+      return at + text.length;
+    }
+  }
+
+  return limit;
+}
+
+/**
+ * Where a document's root element starts, past a byte-order mark, whitespace,
+ * an XML prolog, a doctype and any comments.
+ * @param {Uint8Array} buffer the bytes
+ * @returns {number} the index, or -1 when nothing there is markup
+ */
+function rootElementAt(buffer) {
+  const limit = Math.min(buffer.length, MARKUP_SCAN_LIMIT);
+  let at = startsWith(buffer, BYTE_ORDER_MARK) ? BYTE_ORDER_MARK.length : 0;
+
+  while (at < limit) {
+    if (WHITESPACE.has(buffer[at])) {
+      at += 1;
+    } else if (hasText(buffer, "<!--", at)) {
+      at = endOf(buffer, "-->", at + 4, limit);
+    } else if (hasText(buffer, "<?", at) || hasText(buffer, "<!", at)) {
+      at = endOf(buffer, ">", at + 2, limit);
+    } else if (hasText(buffer, "<", at)) {
+      return at;
+    } else {
+      // Text before any markup: whatever this is, it is not a document.
+      return -1;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * Whether the document's root element is `<svg>`. Asking for the root rather
+ * than for the text anywhere keeps an HTML page that happens to carry an
+ * inline `<svg>` from reading as one.
+ * @param {Uint8Array} buffer the bytes
+ * @returns {boolean} true when it is an SVG document
+ */
+function isSvg(buffer) {
+  const root = rootElementAt(buffer);
+
+  if (root === -1 || !hasTextIgnoringCase(buffer, "<svg", root)) {
+    return false;
+  }
+
+  const after = buffer[root + 4];
+
+  return (
+    typeof after === "undefined" ||
+    WHITESPACE.has(after) ||
+    after === 0x3e ||
+    after === 0x2f
+  );
 }
 
 /**
@@ -161,6 +258,18 @@ function fileTypeFromBuffer(input) {
     return { ext: "jxl", mime: "image/jxl" };
   }
 
+  // The same box structure as JPEG XL's container, naming `jP  ` instead, and
+  // the bare codestream a `.j2k` holds.
+  if (
+    startsWith(
+      buffer,
+      [0x00, 0x00, 0x00, 0x0c, 0x6a, 0x50, 0x20, 0x20, 0x0d, 0x0a, 0x87, 0x0a],
+    ) ||
+    startsWith(buffer, [0xff, 0x4f, 0xff, 0x51])
+  ) {
+    return { ext: "jp2", mime: "image/jp2" };
+  }
+
   if (
     startsWith(buffer, [0x49, 0x49, 0x2a, 0x00]) ||
     startsWith(buffer, [0x4d, 0x4d, 0x00, 0x2a])
@@ -174,6 +283,11 @@ function fileTypeFromBuffer(input) {
 
   if (startsWith(buffer, [0x00, 0x00, 0x01, 0x00])) {
     return { ext: "ico", mime: "image/x-icon" };
+  }
+
+  // Last, so that no signature above is shadowed by a scan of text.
+  if (isSvg(buffer)) {
+    return { ext: "svg", mime: "image/svg+xml" };
   }
 
   return undefined;

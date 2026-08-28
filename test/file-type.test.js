@@ -128,8 +128,94 @@ describe("fileTypeFromBuffer", () => {
     expect(fileTypeFromBuffer(bytes([0x00, 0x00, 0x01, 0x00])).ext).toBe("ico");
   });
 
-  it("should name nothing for SVG, which has no signature", () => {
-    expect(fileTypeFromBuffer(Buffer.from("<svg></svg>"))).toBeUndefined();
+  it.each([
+    [
+      "a plain document",
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+    ],
+    ["a self-closing root", "<svg/>"],
+    ["nothing after the name", "<svg"],
+    // XML is case-sensitive, but reading either costs nothing.
+    ["an upper-case root", "<SVG></SVG>"],
+    ["leading whitespace", "\n\n   <svg></svg>"],
+    ["an XML prolog", '<?xml version="1.0"?><svg></svg>'],
+    [
+      "a prolog and a doctype",
+      '<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN">\n<svg></svg>',
+    ],
+    ["a comment first", "<!-- by hand -->\n<svg></svg>"],
+    ["several comments", "<!--a--><!--b--><svg></svg>"],
+  ])("should detect SVG past %s", (_name, markup) => {
+    expect(fileTypeFromBuffer(Buffer.from(markup))).toEqual({
+      ext: "svg",
+      mime: "image/svg+xml",
+    });
+  });
+
+  it("should detect SVG past a byte-order mark", () => {
+    expect(
+      fileTypeFromBuffer(
+        Buffer.concat([
+          Buffer.from([0xef, 0xbb, 0xbf]),
+          Buffer.from("<svg></svg>"),
+        ]),
+      ).ext,
+    ).toBe("svg");
+  });
+
+  it.each([
+    // The root element is asked for, so an inline one does not count.
+    [
+      "an HTML page carrying an inline one",
+      "<!DOCTYPE html><html><svg/></html>",
+    ],
+    ["an HTML page with no doctype", "<html><svg/></html>"],
+    ["another kind of XML", '<?xml version="1.0"?><rss></rss>'],
+    ["prose mentioning one", "this file talks about <svg> tags"],
+    ["an element whose name merely starts with it", "<svg-icon></svg-icon>"],
+  ])("should not read %s as SVG", (_name, markup) => {
+    expect(fileTypeFromBuffer(Buffer.from(markup))).toBeUndefined();
+  });
+
+  it("should give up rather than walk a document that never opens", () => {
+    // The scan is bounded, so an unterminated comment ends it.
+    const runaway = Buffer.concat([
+      Buffer.from("<!--"),
+      Buffer.alloc(4000, 0x61),
+    ]);
+
+    expect(fileTypeFromBuffer(runaway)).toBeUndefined();
+  });
+
+  it("should not read a gzipped SVG as one, having no markup to read", () => {
+    expect(
+      fileTypeFromBuffer(Buffer.from([0x1f, 0x8b, 0x08, 0x00])),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "the container",
+      [0x00, 0x00, 0x00, 0x0c, 0x6a, 0x50, 0x20, 0x20, 0x0d, 0x0a, 0x87, 0x0a],
+    ],
+    ["a bare codestream", [0xff, 0x4f, 0xff, 0x51]],
+  ])("should detect JPEG 2000 as %s", (_name, signature) => {
+    expect(fileTypeFromBuffer(bytes(signature))).toEqual({
+      ext: "jp2",
+      mime: "image/jp2",
+    });
+  });
+
+  it("should keep JPEG XL's container apart from JPEG 2000's", () => {
+    // The same box structure; only the four bytes naming it differ.
+    expect(
+      fileTypeFromBuffer(
+        bytes([
+          0x00, 0x00, 0x00, 0x0c, 0x4a, 0x58, 0x4c, 0x20, 0x0d, 0x0a, 0x87,
+          0x0a,
+        ]),
+      ).ext,
+    ).toBe("jxl");
   });
 
   it("should name nothing for an unknown format", () => {
@@ -167,6 +253,9 @@ describe("canonicalExtension", () => {
     ["tif", "tiff"],
     ["apng", "png"],
     ["heif", "heic"],
+    ["j2k", "jp2"],
+    ["j2c", "jp2"],
+    ["jpx", "jp2"],
   ])("should read %s as %s", (from, to) => {
     expect(canonicalExtension(from)).toBe(to);
   });
