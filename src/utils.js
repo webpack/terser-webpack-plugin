@@ -2012,6 +2012,53 @@ function readDimension(value) {
 }
 
 /**
+ * A value this table has a number for, and nothing else.
+ * @param {Map<string, number>} numbers what each spelling means
+ * @returns {(value: string) => number | undefined} the reader
+ */
+function readOneOf(numbers) {
+  return (value) => numbers.get(value.toLowerCase());
+}
+
+/**
+ * @param {number} lowest the least it may be
+ * @param {number} highest the most it may be
+ * @returns {(value: string) => number | undefined} the reader
+ */
+function readIntegerBetween(lowest, highest) {
+  return (value) => {
+    const number = readWholeNumber(value);
+
+    return typeof number !== "undefined" &&
+      number >= lowest &&
+      number <= highest
+      ? number
+      : undefined;
+  };
+}
+
+/**
+ * A quarter turn or a multiple of one, normalized to 0-359, or the EXIF
+ * orientation. Negative turns and multiples of a full circle read as the
+ * quarter they land on.
+ * @param {string} value the text
+ * @returns {number | "auto" | undefined} how far to turn clockwise
+ */
+function readRightAngle(value) {
+  if (value === "auto") {
+    return "auto";
+  }
+
+  const number = readNumber(value);
+
+  if (typeof number === "undefined" || number % 90 !== 0) {
+    return undefined;
+  }
+
+  return ((number % 360) + 360) % 360;
+}
+
+/**
  * The one parameter sharp never sees, so the only enum checked here.
  * @param {string} value the text
  * @returns {"px" | "percent" | undefined} the unit asked for
@@ -2132,9 +2179,9 @@ const SHARP_QUERY_PARAMETERS = [
 ];
 
 /**
- * A bag of sharp parameters: whatever the table's `name`s are, read off a
- * query or set in `minimizerOptions`.
- * @typedef {{ [name: string]: EXPECTED_ANY }} SharpTransforms
+ * A bag of parameters: whatever a table's `name`s are, read off a query or set
+ * in `minimizerOptions`.
+ * @typedef {{ [name: string]: EXPECTED_ANY }} QueryValues
  */
 
 /**
@@ -2150,28 +2197,44 @@ const SHARP_PIPELINE_OPERATIONS = [
   "sharpen",
 ];
 
-/** @type {Map<string, (typeof SHARP_QUERY_PARAMETERS)[number]>} */
-const SHARP_QUERY_PARAMETER_BY_SPELLING = new Map();
-
-for (const parameter of SHARP_QUERY_PARAMETERS) {
-  for (const spelling of parameter.spellings) {
-    // Looked up in lower case, so a spelling is written however it reads best.
-    SHARP_QUERY_PARAMETER_BY_SPELLING.set(spelling.toLowerCase(), parameter);
-  }
-}
+/**
+ * @typedef {{ spellings: string[], group: string, name: string, read: (value: string) => EXPECTED_ANY }} QueryParameter
+ */
 
 /**
- * What an asset's name asks sharp for, grouped by the argument bag it belongs
- * in. `output.assetModuleFilename` carries the request's query into the
- * emitted name, so `import banner from "./banner.png?width=320"` arrives here
- * as `banner.png?width=320`.
+ * A table keyed by every spelling that names one of its parameters.
+ * @param {QueryParameter[]} parameters the table
+ * @returns {Map<string, QueryParameter>} it, ready to look a spelling up in
+ */
+function bySpelling(parameters) {
+  /** @type {Map<string, QueryParameter>} */
+  const lookup = new Map();
+
+  for (const parameter of parameters) {
+    for (const spelling of parameter.spellings) {
+      // Looked up in lower case, so a spelling is written however it reads best.
+      lookup.set(spelling.toLowerCase(), parameter);
+    }
+  }
+
+  return lookup;
+}
+
+const SHARP_QUERY_PARAMETER_BY_SPELLING = bySpelling(SHARP_QUERY_PARAMETERS);
+
+/**
+ * What an asset's name asks a minimizer for, grouped by the argument bag each
+ * value belongs in. `output.assetModuleFilename` carries the request's query
+ * into the emitted name, so `import banner from "./banner.png?width=320"`
+ * arrives here as `banner.png?width=320`.
  *
  * None of this needs a new name — the asset keeps the one it already has —
  * which is why it can be read here rather than in a loader, unlike `?as=`.
  * @param {string} name asset name
- * @returns {{ resize?: SharpTransforms, pipeline?: SharpTransforms, encode?: SharpTransforms } | undefined} what it asks for, or undefined when it asks for nothing
+ * @param {Map<string, QueryParameter>} parameters what this minimizer accepts
+ * @returns {{ [group: string]: QueryValues } | undefined} what it asks for, or undefined when it asks for nothing
  */
-function sharpQuery(name) {
+function readQuery(name, parameters) {
   const queryIndex = name.indexOf("?");
 
   if (queryIndex === -1) {
@@ -2180,16 +2243,14 @@ function sharpQuery(name) {
 
   const query = name.slice(queryIndex + 1);
   const fragmentIndex = query.indexOf("#");
-  /** @type {{ [group: string]: { [name: string]: EXPECTED_ANY } }} */
+  /** @type {{ [group: string]: QueryValues }} */
   const asked = {};
   let asksForAnything = false;
 
   for (const [spelling, text] of new URLSearchParams(
     fragmentIndex === -1 ? query : query.slice(0, fragmentIndex),
   )) {
-    const parameter = SHARP_QUERY_PARAMETER_BY_SPELLING.get(
-      spelling.toLowerCase(),
-    );
+    const parameter = parameters.get(spelling.toLowerCase());
 
     if (!parameter) {
       continue;
@@ -2311,8 +2372,8 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
 
   const pipeline = sharp(toBuffer(code), { animated: true });
 
-  const requested = sharpQuery(name);
-  const transforms = /** @type {SharpTransforms} */ (
+  const requested = readQuery(name, SHARP_QUERY_PARAMETER_BY_SPELLING);
+  const transforms = /** @type {QueryValues} */ (
     mergeRequested(
       {
         rotate: options.rotate,
@@ -2409,6 +2470,153 @@ sharpMinify.supportsWorkerThreads = () => false;
 sharpMinify.filter = (name) => SHARP_MINIFY_FORMATS.has(extensionOf(name));
 
 /**
+ * `@napi-rs/image` declares its enums in TypeScript alone — at runtime they
+ * are bare numbers — so each spelling is mapped to its number here. That also
+ * makes an unknown one a value this table simply has no number for, which
+ * matters more than it does for sharp: napi either throws without naming the
+ * parameter (`Value is none of these types`) or, for a quality out of range,
+ * silently writes a bigger file.
+ * @type {Map<string, number>}
+ */
+const NAPI_RS_IMAGE_FITS = new Map([
+  ["cover", 0],
+  ["fill", 1],
+  ["inside", 2],
+]);
+
+/** @type {Map<string, number>} */
+const NAPI_RS_IMAGE_FILTERS = new Map([
+  ["nearest", 0],
+  ["triangle", 1],
+  ["catmull-rom", 2],
+  ["gaussian", 3],
+  ["lanczos3", 4],
+]);
+
+/**
+ * EXIF orientation encodes the eight symmetries of a rectangle, and `rotate`
+ * takes one of them, so mirroring and a turn compose into a single value.
+ * Keyed by whether the image is mirrored and how far it then turns clockwise.
+ * @type {Map<string, number>}
+ */
+const NAPI_RS_IMAGE_ORIENTATIONS = new Map([
+  ["0", 1],
+  ["90", 6],
+  ["180", 3],
+  ["270", 8],
+  ["mirrored 0", 2],
+  ["mirrored 90", 7],
+  ["mirrored 180", 4],
+  ["mirrored 270", 5],
+]);
+
+/**
+ * What an asset's name may ask `@napi-rs/image` for. Same spellings as sharp's
+ * table wherever the two can do the same thing, so one vocabulary covers both.
+ * @type {QueryParameter[]}
+ */
+const NAPI_RS_IMAGE_QUERY_PARAMETERS = [
+  {
+    spellings: ["width", "w"],
+    group: "resize",
+    name: "width",
+    read: readDimension,
+  },
+  {
+    spellings: ["height", "h"],
+    group: "resize",
+    name: "height",
+    read: readDimension,
+  },
+  {
+    spellings: ["fit"],
+    group: "resize",
+    name: "fit",
+    read: readOneOf(NAPI_RS_IMAGE_FITS),
+  },
+  {
+    spellings: ["filter"],
+    group: "resize",
+    name: "filter",
+    read: readOneOf(NAPI_RS_IMAGE_FILTERS),
+  },
+  {
+    spellings: ["rotate", "rot"],
+    group: "orient",
+    name: "rotate",
+    read: readRightAngle,
+  },
+  { spellings: ["flip"], group: "orient", name: "flip", read: readFlag },
+  { spellings: ["flop"], group: "orient", name: "flop", read: readFlag },
+  {
+    spellings: ["grayscale", "greyscale", "gray", "grey"],
+    group: "pipeline",
+    name: "grayscale",
+    read: readFlag,
+  },
+  { spellings: ["invert"], group: "pipeline", name: "invert", read: readFlag },
+  {
+    spellings: ["blur"],
+    group: "pipeline",
+    name: "blur",
+    read: readPositiveNumber,
+  },
+  {
+    spellings: ["quality", "q"],
+    group: "encode",
+    name: "quality",
+    read: readIntegerBetween(0, 100),
+  },
+  {
+    spellings: ["lossless"],
+    group: "encode",
+    name: "lossless",
+    read: readFlag,
+  },
+  {
+    spellings: ["speed"],
+    group: "encode",
+    name: "speed",
+    read: readIntegerBetween(1, 10),
+  },
+];
+
+const NAPI_RS_IMAGE_QUERY_PARAMETER_BY_SPELLING = bySpelling(
+  NAPI_RS_IMAGE_QUERY_PARAMETERS,
+);
+
+/**
+ * The pipeline parameters that are a `Transformer` method of the same name.
+ * `blur` takes its sigma; the other two take nothing, so a false reads as
+ * "do not call it" rather than being passed on.
+ * @type {("grayscale" | "invert")[]}
+ */
+const NAPI_RS_IMAGE_OPERATIONS = ["grayscale", "invert"];
+
+/**
+ * The single orientation to hand `rotate`, given what was asked for. A mirror
+ * about the vertical axis is a mirror about the horizontal one turned half a
+ * circle, which is what lets the two compose into one value.
+ * @param {QueryValues} orient rotate, flip and flop as asked for
+ * @returns {number | undefined} the EXIF orientation, or undefined for none
+ */
+function napiRsImageOrientation(orient) {
+  const turn = typeof orient.rotate === "number" ? orient.rotate : 0;
+  const rotation = (turn + (orient.flip ? 180 : 0)) % 360;
+  const mirrored = Boolean(orient.flip) !== Boolean(orient.flop);
+
+  // Leaving it where it is is not an orientation to apply, so saying so lets
+  // `rotate=auto` keep the no-argument call that reads the EXIF one.
+  if (rotation === 0 && !mirrored) {
+    return undefined;
+  }
+
+  return NAPI_RS_IMAGE_ORIENTATIONS.get(
+    `${mirrored ? "mirrored " : ""}${rotation}`,
+  );
+}
+
+/**
  * Which encoder each extension names. Only the four `@napi-rs/image` both reads
  * back reliably and makes smaller: `bmp` is uncompressed so re-encoding gains
  * nothing, `tiff` and `ico` fail to decode what other encoders write, and
@@ -2424,28 +2632,61 @@ const NAPI_RS_IMAGE_FORMATS = new Map([
 ]);
 
 /**
- * How each format is re-encoded as itself. PNG and JPEG are rewritten in place
- * from their encoded bytes — going through `Transformer` decodes them to
- * pixels instead and saves a fraction as much, 9% against oxipng's 99% on this
- * repository's own fixture.
- * @type {Map<string, (image: EXPECTED_ANY, input: Buffer, options: EXPECTED_OBJECT) => Promise<Buffer>>}
+ * How each format is written. A `repack` one rewrites the encoded bytes in
+ * place, which is where napi's win is — oxipng saves 99% of this repository's
+ * png fixture where decoding to pixels and encoding again saves 9% — so when a
+ * transform has to run first, its output is handed back to the repack rather
+ * than replacing it. The other two already go through a `Transformer`, so the
+ * transforms simply join the one that was going to run anyway.
+ * @type {Map<string, { write: (transformer: EXPECTED_ANY, options: QueryValues) => Promise<Buffer>, repack?: (image: EXPECTED_ANY, bytes: Buffer, options: QueryValues) => Promise<Buffer> }>}
  */
 const NAPI_RS_IMAGE_ENCODERS = new Map([
   [
     "avif",
-    (image, input, options) => new image.Transformer(input).avif(options),
+    {
+      // avif has no `lossless` of its own; on its scale that is quality 100.
+      write: (transformer, options) =>
+        transformer.avif(
+          options.lossless ? { ...options, quality: 100 } : options,
+        ),
+    },
   ],
-  ["jpeg", (image, input, options) => image.compressJpeg(input, options)],
-  ["png", (image, input, options) => image.losslessCompressPng(input, options)],
-  // The one whose options are a bare quality factor rather than an object.
   [
     "webp",
-    (image, input, options) =>
-      new image.Transformer(input).webp(
-        /** @type {{ quality?: number }} */ (options).quality,
-      ),
+    {
+      write: (transformer, options) =>
+        options.lossless
+          ? transformer.webpLossless()
+          : transformer.webp(options.quality),
+    },
+  ],
+  [
+    "jpeg",
+    {
+      // Written back at full quality so mozjpeg, not this step, decides what
+      // is lost.
+      write: (transformer) => transformer.jpeg(100),
+      repack: (image, bytes, options) => image.compressJpeg(bytes, options),
+    },
+  ],
+  [
+    "png",
+    {
+      write: (transformer) => transformer.png(),
+      repack: (image, bytes, options) =>
+        image.losslessCompressPng(bytes, options),
+    },
   ],
 ]);
+
+/**
+ * @param {Buffer} code the minified bytes
+ * @param {string[]} warnings what came up on the way, if anything did
+ * @returns {MinimizedResult} the result, carrying them only when there are any
+ */
+function withWarnings(code, warnings) {
+  return warnings.length > 0 ? { code, warnings } : { code };
+}
 
 /* istanbul ignore next */
 /**
@@ -2459,7 +2700,18 @@ const NAPI_RS_IMAGE_ENCODERS = new Map([
 async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
   /**
    * @typedef {object} NapiRsImageMinifyOptions
+   * @property {{ width?: number, height?: number, fit?: number, filter?: number }=} resize resize the image before re-encoding it
+   * @property {number | "auto"=} rotate turn by a quarter, half or three quarters, or by what the EXIF orientation says
+   * @property {boolean=} flip mirror vertically
+   * @property {boolean=} flop mirror horizontally
+   * @property {boolean=} grayscale drop the colour
+   * @property {boolean=} invert invert the colour
+   * @property {number=} blur blur by this sigma
    * @property {{ [format: string]: EXPECTED_OBJECT }=} encodeOptions per-format options, keyed by the format's own name — `avif`, `jpeg`, `png`, `webp`
+   *
+   * Every one of these can also be asked for by the asset's own name — see
+   * `NAPI_RS_IMAGE_QUERY_PARAMETERS` — and the name wins where both say
+   * something.
    */
   const [[name, code]] = Object.entries(input);
   const format = NAPI_RS_IMAGE_FORMATS.get(extensionOf(name));
@@ -2470,23 +2722,149 @@ async function napiRsImageMinify(input, sourceMap, minimizerOptions) {
     return { code };
   }
 
-  const { encodeOptions } = /** @type {NapiRsImageMinifyOptions} */ (
+  const options = /** @type {NapiRsImageMinifyOptions} */ (
     minimizerOptions || {}
+  );
+  const requested = readQuery(name, NAPI_RS_IMAGE_QUERY_PARAMETER_BY_SPELLING);
+  const resize = mergeRequested(options.resize, requested && requested.resize);
+  const orient = /** @type {QueryValues} */ (
+    mergeRequested(
+      { rotate: options.rotate, flip: options.flip, flop: options.flop },
+      requested && requested.orient,
+    )
+  );
+  const pipeline = /** @type {QueryValues} */ (
+    mergeRequested(
+      {
+        grayscale: options.grayscale,
+        invert: options.invert,
+        blur: options.blur,
+      },
+      requested && requested.pipeline,
+    )
+  );
+  const encodeOptions = /** @type {QueryValues} */ (
+    mergeRequested(
+      (options.encodeOptions && options.encodeOptions[format]) || {},
+      requested && requested.encode,
+    )
   );
 
   const image = require("@napi-rs/image");
 
-  const encode =
+  const encoder =
     /** @type {NonNullable<ReturnType<typeof NAPI_RS_IMAGE_ENCODERS.get>>} */
     (NAPI_RS_IMAGE_ENCODERS.get(format));
 
-  return {
-    code: await encode(
-      image,
+  const orientation = napiRsImageOrientation(orient);
+  let turnsByExif = orient.rotate === "auto";
+  const resizes =
+    resize &&
+    (typeof resize.width === "number" || typeof resize.height === "number");
+  const operates = NAPI_RS_IMAGE_OPERATIONS.some(
+    (operation) => pipeline[operation],
+  );
+  const blurs = typeof pipeline.blur === "number";
+  // Decoding and encoding again costs some twenty times what reading the
+  // header does, so an image whose EXIF asks for nothing keeps the fast path
+  // rather than paying for a turn it does not need — which is what
+  // `rotate: "auto"` set for every image would otherwise cost most of them.
+  if (turnsByExif && typeof orientation === "undefined") {
+    const { orientation: exif } = await new image.Transformer(
       toBuffer(code),
-      (encodeOptions && encodeOptions[format]) || {},
-    ),
+    ).metadata(true);
+
+    turnsByExif = typeof exif === "number" && exif > 1;
+  }
+
+  let sizing = resize;
+  const askedHeight = resize && resize.height;
+
+  // `resize` needs a width, so a height on its own is turned into the width
+  // that keeps the image's own proportions — what asking for a height alone
+  // is understood to mean everywhere else.
+  if (
+    resizes &&
+    typeof resize.width !== "number" &&
+    typeof askedHeight === "number"
+  ) {
+    const { width, height } = await new image.Transformer(
+      toBuffer(code),
+    ).metadata();
+
+    sizing = {
+      ...resize,
+      width: Math.max(1, Math.round((width * askedHeight) / height)),
+    };
+  }
+
+  const transforms =
+    resizes ||
+    operates ||
+    blurs ||
+    turnsByExif ||
+    typeof orientation !== "undefined";
+
+  /** @type {string[]} */
+  const warnings = [];
+
+  /**
+   * @param {EXPECTED_ANY} transformer a `Transformer`
+   * @returns {EXPECTED_ANY} it, with everything asked for applied
+   */
+  const transform = (transformer) => {
+    // One orientation is all `rotate` holds — a second call replaces the
+    // first rather than composing — so EXIF and an explicit turn are
+    // alternatives, and the explicit one is the one that was spelled out.
+    if (typeof orientation !== "undefined") {
+      if (turnsByExif) {
+        warnings.push(
+          `"napiRsImageMinify" applies one orientation, so "rotate=auto" was not applied to "${name}" alongside the turn asked for`,
+        );
+      }
+
+      transformer.rotate(orientation);
+    } else if (turnsByExif) {
+      transformer.rotate();
+    }
+
+    for (const operation of NAPI_RS_IMAGE_OPERATIONS) {
+      if (pipeline[operation]) {
+        transformer[operation]();
+      }
+    }
+
+    if (blurs) {
+      transformer.blur(pipeline.blur);
+    }
+
+    if (resizes) {
+      transformer.resize(sizing);
+    }
+
+    return transformer;
   };
+
+  let bytes = toBuffer(code);
+
+  if (encoder.repack) {
+    if (transforms) {
+      bytes = await encoder.write(
+        transform(new image.Transformer(bytes)),
+        encodeOptions,
+      );
+    }
+
+    return withWarnings(
+      await encoder.repack(image, bytes, encodeOptions),
+      warnings,
+    );
+  }
+
+  return withWarnings(
+    await encoder.write(transform(new image.Transformer(bytes)), encodeOptions),
+    warnings,
+  );
 }
 
 /**
@@ -2664,11 +3042,86 @@ async function svgoMinify(input, sourceMap, minimizerOptions) {
     minimizerOptions || {}
   );
 
+  // Read here rather than through the table the image minimizers share: this
+  // function reaches a worker as source and carries no module scope with it.
+  // `floatPrecision` stops at 10 because `toFixed` does, and svgo answers a
+  // number outside that with a RangeError naming neither.
+  const queryIndex = name.indexOf("?");
+  /** @type {import("svgo").Config} */
+  const asked = {};
+  /** @type {{ pretty?: boolean, indent?: number }} */
+  const js2svg = {};
+
+  if (queryIndex !== -1) {
+    const text = name.slice(queryIndex + 1);
+    const fragmentIndex = text.indexOf("#");
+
+    for (const [spelling, value] of new URLSearchParams(
+      fragmentIndex === -1 ? text : text.slice(0, fragmentIndex),
+    )) {
+      const lowered = value.toLowerCase();
+      const flag =
+        lowered === "" ||
+        lowered === "true" ||
+        lowered === "1" ||
+        lowered === "yes"
+          ? true
+          : lowered === "false" || lowered === "0" || lowered === "no"
+            ? false
+            : undefined;
+      const number = Number(value);
+      const whole =
+        value.trim() !== "" &&
+        Number.isInteger(number) &&
+        number >= 0 &&
+        number <= 10
+          ? number
+          : undefined;
+
+      // `floatPrecision` is svgo's own name for it and `precision` the short
+      // one, so dropping the prefix leaves one spelling to match.
+      switch (spelling.toLowerCase().replace("float", "")) {
+        case "precision":
+          if (typeof whole !== "undefined") {
+            asked.floatPrecision = whole;
+          }
+
+          break;
+        case "multipass":
+          if (typeof flag !== "undefined") {
+            asked.multipass = flag;
+          }
+
+          break;
+        case "pretty":
+          if (typeof flag !== "undefined") {
+            js2svg.pretty = flag;
+          }
+
+          break;
+        case "indent":
+          if (typeof whole !== "undefined") {
+            js2svg.indent = whole;
+          }
+
+          break;
+        default:
+      }
+    }
+  }
+
   /** @type {import("svgo")} */
   // eslint-disable-next-line import/no-unresolved
   const { optimize } = require("svgo");
 
-  const result = optimize(code, { path: name, ...encodeOptions });
+  const result = optimize(code, {
+    path: name,
+    ...encodeOptions,
+    ...asked,
+    ...(Object.keys(js2svg).length > 0
+      ? { js2svg: { ...(encodeOptions && encodeOptions.js2svg), ...js2svg } }
+      : {}),
+  });
 
   return { code: result.data };
 }

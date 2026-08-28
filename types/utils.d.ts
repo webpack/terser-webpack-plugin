@@ -1,4 +1,10 @@
 export type Task<T> = () => Promise<T>;
+export type QueryParameter = {
+  spellings: string[];
+  group: string;
+  name: string;
+  read: (value: string) => EXPECTED_ANY;
+};
 export type FunctionReturning<T> = () => T;
 export type ExtractCommentsOptions =
   import("./index.js").ExtractCommentsOptions;
@@ -14,10 +20,10 @@ export type EXPECTED_OBJECT = import("./index.js").EXPECTED_OBJECT;
 export type EXPECTED_ANY = import("./index.js").EXPECTED_ANY;
 export type ExtractedComments = string[];
 /**
- * A bag of sharp parameters: whatever the table's `name`s are, read off a
- * query or set in `minimizerOptions`.
+ * A bag of parameters: whatever a table's `name`s are, read off a query or set
+ * in `minimizerOptions`.
  */
-export type SharpTransforms = {
+export type QueryValues = {
   [name: string]: EXPECTED_ANY;
 };
 /**

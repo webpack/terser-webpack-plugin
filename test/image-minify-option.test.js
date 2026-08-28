@@ -598,7 +598,9 @@ describe("what an asset's name asks sharp for", () => {
     const sharp = require("sharp");
 
     const { code } = await MinimizerPlugin.sharpMinify(
-      { [`image.${format}${query}`]: await patterned(sharp, format) },
+      {
+        [`image.${format}${query}`]: await patterned(sharp, undefined, format),
+      },
       undefined,
       options,
     );
@@ -781,6 +783,412 @@ describe("what an asset's name asks sharp for", () => {
     const format = query.includes("effort") ? "webp" : "png";
 
     await expect(minified(query, undefined, format)).rejects.toThrow(message);
+  });
+});
+
+describe("what an asset's name asks @napi-rs/image for", () => {
+  const WIDTH = 120;
+  const HEIGHT = 60;
+
+  /**
+   * A gradient with noise, so flip, blur and grayscale are all detectable.
+   * @param {import("sharp")} sharp sharp
+   * @param {object=} metadata extra metadata to stamp on it
+   * @param {string=} format the format to encode as
+   * @returns {Promise<Buffer>} the encoded image
+   */
+  function patterned(sharp, metadata, format = "png") {
+    const raw = Buffer.alloc(WIDTH * HEIGHT * 3);
+    let seed = 12345;
+
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+
+        const i = (y * WIDTH + x) * 3;
+
+        raw[i] = (x * 2 + (seed % 40)) % 256;
+        raw[i + 1] = (y * 3 + ((seed >> 8) % 40)) % 256;
+        raw[i + 2] = (x + y + ((seed >> 16) % 40)) % 256;
+      }
+    }
+
+    const pipeline = sharp(raw, {
+      raw: { width: WIDTH, height: HEIGHT, channels: 3 },
+    });
+
+    return (metadata ? pipeline.withMetadata(metadata) : pipeline)
+      .toFormat(
+        format,
+        format === "png" ? { compressionLevel: 0 } : { quality: 100 },
+      )
+      .toBuffer();
+  }
+
+  /**
+   * @param {string} query the query to put on the asset's name
+   * @param {object=} options minimizer options
+   * @param {string=} format the format to encode as
+   * @returns {Promise<import("../src").MinimizedResult>} what the minimizer returned
+   */
+  async function minified(query, options, format = "png") {
+    const sharp = require("sharp");
+
+    return MinimizerPlugin.napiRsImageMinify(
+      {
+        [`image.${format}${query}`]: await patterned(sharp, undefined, format),
+      },
+      undefined,
+      options,
+    );
+  }
+
+  /**
+   * @param {Buffer} image an encoded image
+   * @returns {Promise<Buffer>} its pixels
+   */
+  const pixels = (image) => require("sharp")(image).raw().toBuffer();
+
+  it.each([
+    ["?width=60", [60, 30]],
+    ["?w=60", [60, 30]],
+    ["?height=20", [40, 20]],
+    ["?w=60&h=20", [60, 20]],
+    ["?w=60&h=20&fit=cover", [60, 20]],
+    ["?w=60&h=20&fit=fill", [60, 20]],
+    // `inside` keeps the aspect ratio within the box rather than filling it.
+    ["?w=60&h=20&fit=inside", [40, 20]],
+    ["?w=60&filter=lanczos3", [60, 30]],
+    ["?w=60&filter=nearest", [60, 30]],
+    // Neither a size nor a number, so neither is read as one.
+    ["?v=2", [WIDTH, HEIGHT]],
+    ["?width=nonsense", [WIDTH, HEIGHT]],
+    ["?width=-5", [WIDTH, HEIGHT]],
+    // An unknown fit has no number to map to, so it is dropped and the width
+    // it was asked alongside still applies.
+    ["?w=60&fit=nonsense", [60, 30]],
+    ["?width=60#deep", [60, 30]],
+  ])(
+    "should read the size %s off the asset name",
+    async (query, [width, height]) => {
+      const { code } = await minified(query);
+
+      await expect(require("sharp")(code).metadata()).resolves.toMatchObject({
+        width,
+        height,
+      });
+    },
+  );
+
+  it("should let the query override a configured resize", async () => {
+    const { code } = await minified("?width=60", {
+      resize: { width: 10 },
+    });
+
+    await expect(require("sharp")(code).metadata()).resolves.toMatchObject({
+      width: 60,
+    });
+  });
+
+  it.each([
+    ["?rotate=90", [60, 120]],
+    ["?rot=270", [60, 120]],
+    ["?rotate=180", [WIDTH, HEIGHT]],
+    // Negative turns and whole circles land on the quarter they name.
+    ["?rotate=-90", [60, 120]],
+    ["?rotate=450", [60, 120]],
+    ["?rotate=360", [WIDTH, HEIGHT]],
+    // Not a quarter turn, so not a turn.
+    ["?rotate=45", [WIDTH, HEIGHT]],
+    ["?rotate=90&flip", [60, 120]],
+  ])("should turn for %s", async (query, [width, height]) => {
+    const { code } = await minified(query);
+
+    await expect(require("sharp")(code).metadata()).resolves.toMatchObject({
+      width,
+      height,
+    });
+  });
+
+  it.each([
+    ["flip", "?flip"],
+    ["flop", "?flop"],
+  ])(
+    "should mirror for `%s` exactly as sharp does",
+    async (operation, query) => {
+      const sharp = require("sharp");
+
+      const source = await patterned(sharp);
+      const mirrored = await sharp(source)[operation]().png().toBuffer();
+      const { code } = await MinimizerPlugin.napiRsImageMinify({
+        [`image.png${query}`]: source,
+      });
+
+      expect(await pixels(code)).toEqual(await pixels(mirrored));
+    },
+  );
+
+  it("should read a mirror and a turn as the one orientation they compose to", async () => {
+    // Mirroring both ways is a half turn, which is the whole reason the two
+    // fit in the single value `rotate` takes.
+    expect(await pixels((await minified("?flip&flop")).code)).toEqual(
+      await pixels((await minified("?rotate=180")).code),
+    );
+  });
+
+  it("should say so when EXIF and an explicit turn are both asked for", async () => {
+    const { warnings } = await minified("?rotate=auto&flip");
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/applies one orientation/);
+  });
+
+  it("should turn by the EXIF orientation for `rotate=auto`", async () => {
+    const sharp = require("sharp");
+
+    const turned = await patterned(sharp, { orientation: 6 }, "jpeg");
+    const { code, warnings } = await MinimizerPlugin.napiRsImageMinify({
+      "image.jpeg?rotate=auto": turned,
+    });
+
+    expect(warnings).toBeUndefined();
+    await expect(sharp(code).metadata()).resolves.toMatchObject({
+      width: HEIGHT,
+      height: WIDTH,
+    });
+  });
+
+  it("should not decode an image whose EXIF asks for nothing", async () => {
+    // Reading the header costs a twentieth of decoding and encoding again, so
+    // an image with no orientation to apply keeps the bytes the fast path
+    // would have produced.
+    const sharp = require("sharp");
+
+    const source = await patterned(sharp, undefined, "jpeg");
+    const asked = await MinimizerPlugin.napiRsImageMinify({
+      "image.jpeg?rotate=auto": source,
+    });
+    const plain = await MinimizerPlugin.napiRsImageMinify({
+      "image.jpeg": source,
+    });
+
+    expect(asked.code).toEqual(plain.code);
+  });
+
+  it.each(["grayscale", "greyscale", "gray", "grey"])(
+    "should drop the colour for `%s`",
+    async (spelling) => {
+      const raw = await pixels((await minified(`?${spelling}`)).code);
+      let grey = true;
+
+      for (let i = 0; i + 2 < raw.length; i += 3) {
+        if (raw[i] !== raw[i + 1] || raw[i + 1] !== raw[i + 2]) {
+          grey = false;
+          break;
+        }
+      }
+
+      expect(grey).toBe(true);
+    },
+  );
+
+  it.each(["?invert", "?blur=3"])(
+    "should change the pixels for %s",
+    async (query) => {
+      const changed = await pixels((await minified(query)).code);
+
+      expect(changed).not.toEqual(await pixels((await minified("")).code));
+      expect(changed).toHaveLength(WIDTH * HEIGHT * 3);
+    },
+  );
+
+  it("should keep the repack that makes this minimizer worth using", async () => {
+    // Transforming means decoding, and decoding loses oxipng's rewrite unless
+    // its output is handed back to it — which is the whole margin here, 99%
+    // against 9% on this repository's own fixture.
+    const sharp = require("sharp");
+
+    const source = await patterned(sharp);
+
+    const image = require("@napi-rs/image");
+
+    const withoutRepack = await new image.Transformer(source)
+      .resize({ width: 60 })
+      .png();
+    const { code } = await MinimizerPlugin.napiRsImageMinify({
+      "image.png?width=60": source,
+    });
+
+    expect(code.length).toBeLessThan(withoutRepack.length);
+  });
+
+  it.each([
+    ["jpeg", "?quality=20", "?quality=95"],
+    ["webp", "?q=20", "?q=95"],
+    ["avif", "?q=20", "?q=95"],
+  ])(
+    "should read `quality` off the name for a %s",
+    async (format, cheap, dear) => {
+      const { code: small } = await minified(cheap, undefined, format);
+      const { code: large } = await minified(dear, undefined, format);
+
+      expect(small.length).toBeLessThan(large.length);
+    },
+  );
+
+  it.each([
+    ["webp", "?lossless"],
+    ["avif", "?lossless"],
+    ["avif", "?speed=8"],
+  ])("should read %s's %s off the name", async (format, query) => {
+    const { code: asked } = await minified(query, undefined, format);
+    const { code: plain } = await minified("", undefined, format);
+
+    expect(asked).not.toHaveLength(plain.length);
+  });
+
+  it("should ignore a quality this minimizer would otherwise mangle", async () => {
+    // napi does not reject a quality of its own: 150 silently writes a file
+    // bigger than the default, which is why the range is checked here.
+    const { code: junk } = await minified("?quality=150", undefined, "jpeg");
+    const { code: plain } = await minified("", undefined, "jpeg");
+
+    expect(junk).toEqual(plain);
+  });
+});
+
+describe("what an asset's name asks svgo for", () => {
+  const SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><path d="M1.23456 2.34567L50.98765 60.12345Z" fill="#ff0000"/></svg>';
+
+  /**
+   * @param {string} query the query to put on the asset's name
+   * @param {object=} options minimizer options
+   * @returns {Promise<string>} the minified svg
+   */
+  async function minified(query, options) {
+    const { code } = await MinimizerPlugin.svgoMinify(
+      { [`icon.svg${query}`]: SVG },
+      undefined,
+      options,
+    );
+
+    return /** @type {string} */ (code);
+  }
+
+  it.each([
+    ["?precision=0", 'd="m1 2 50 58Z"'],
+    ["?precision=1", 'd="M1.2 2.3 51 60.1Z"'],
+    ["?floatPrecision=2", 'd="M1.23 2.35 51 60.12Z"'],
+    // Written however it reads best; matched in lower case.
+    ["?PRECISION=1", 'd="M1.2 2.3 51 60.1Z"'],
+    ["?precision=1#deep", 'd="M1.2 2.3 51 60.1Z"'],
+  ])("should read %s off the asset name", async (query, expected) => {
+    expect(await minified(query)).toContain(expected);
+  });
+
+  it.each([
+    // `toFixed` stops at 10 and svgo answers anything else with a RangeError
+    // naming neither the option nor the value, so the range is checked first.
+    "?precision=-1",
+    "?precision=99",
+    "?precision=abc",
+    "?v=2",
+    "?multipass=perhaps",
+  ])("should ignore %s", async (query) => {
+    expect(await minified(query)).toBe(await minified(""));
+  });
+
+  it.each([
+    ["?pretty", "    <path"],
+    ["?pretty&indent=2", "  <path"],
+    ["?pretty&indent=0", "<path"],
+  ])("should lay the output out for %s", async (query, indented) => {
+    expect((await minified(query)).split("\n")[1]).toBe(
+      `${indented} fill="red" d="m1.235 2.346 49.753 57.777Z"/>`,
+    );
+  });
+
+  it("should read `pretty=false` as asking against it", async () => {
+    expect(await minified("?pretty=false")).toBe(await minified(""));
+  });
+
+  it("should let the query override `encodeOptions`", async () => {
+    const configured = { encodeOptions: { floatPrecision: 4 } };
+
+    expect(await minified("?precision=1", configured)).toContain(
+      'd="M1.2 2.3 51 60.1Z"',
+    );
+    expect(await minified("", configured)).toContain(
+      'd="m1.2346 2.3457 49.753 57.7778Z"',
+    );
+  });
+
+  it("should be read in a worker, where the function arrives as source", async () => {
+    // The minify function crosses the worker boundary as source and carries no
+    // module scope with it, which is why svgo reads its query inline rather
+    // than through the table the image minimizers share. A build with the pool
+    // on is the only thing that catches getting that wrong.
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/queried-svgs.js"),
+      output: {
+        pathinfo: false,
+        path: path.resolve(__dirname, "dist"),
+        filename: "[name].js",
+        assetModuleFilename: (pathData) => {
+          const query =
+            (pathData.module &&
+              pathData.module.resourceResolveData &&
+              pathData.module.resourceResolveData.query) ||
+            "";
+
+          return `[name]${query.replace(/^\?/, "-").replace(/[=&]/g, "-")}[ext][query]`;
+        },
+      },
+      module: { rules: [{ test: /\.svg$/i, type: "asset/resource" }] },
+    });
+
+    new MinimizerPlugin({
+      test: /\.svg$/i,
+      parallel: 2,
+      minify: MinimizerPlugin.svgoMinify,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toEqual([]);
+
+    const emitted = {};
+
+    for (const asset of stats
+      .toJson({ all: false, assets: true })
+      .assets.filter((item) => !item.name.endsWith(".js"))) {
+      emitted[asset.name] = readBytes(
+        compiler,
+        stats,
+        asset.name.replace(/[?#].*$/, ""),
+      ).toString();
+    }
+
+    expect(Object.keys(emitted).sort()).toEqual([
+      "precise-precision-1.svg?precision=1",
+      "precise-pretty.svg?pretty",
+      "precise.svg",
+    ]);
+    expect(emitted["precise-pretty.svg?pretty"]).toContain("\n");
+    expect(emitted["precise.svg"]).not.toContain("\n");
+    expect(emitted["precise-precision-1.svg?precision=1"]).toContain(
+      'd="M1.2 2.3 51 60.1Z"',
+    );
+  });
+
+  it("should keep an `encodeOptions.js2svg` the query does not speak for", async () => {
+    const configured = { encodeOptions: { js2svg: { indent: 3 } } };
+
+    expect((await minified("?pretty", configured)).split("\n")[1]).toMatch(
+      /^ {3}<path/,
+    );
   });
 });
 

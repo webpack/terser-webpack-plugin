@@ -49,7 +49,7 @@ Image minimizers:
 - [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize, rotate, flip, grayscale, blur or sharpen on the way — from the options or from the asset's own name. Requires `npm install --save-dev sharp`.
 - [`svgo`](https://github.com/svg/svgo) — `MinimizerPlugin.svgoMinify`. Minifies SVG, including an `asset/inline` SVG that no `test` can match. Requires `npm install --save-dev svgo`.
 - [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin.
-- [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg. Requires `npm install --save-dev @napi-rs/image`.
+- [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg, and can resize, turn, mirror, grayscale, invert or blur on the way — from the options or from the asset's own name. Requires `npm install --save-dev @napi-rs/image`.
 
 These only minify — they never change an image's format or name; see
 [Images](#images).
@@ -1777,7 +1777,38 @@ Two rules decide what happens to a value:
   dropped silently. An option a format has no use for — `?lossless` on a jpeg —
   is simply ignored.
 
-Only `sharpMinify` reads these — it is the only bundled minimizer that resizes.
+**`napiRsImageMinify` reads the same names**, as far as `@napi-rs/image` goes:
+`width`/`w`, `height`/`h`, `fit` (`cover`, `fill`, `inside`), `filter`
+(`nearest`, `triangle`, `catmull-rom`, `gaussian`, `lanczos3`), `rotate`/`rot`,
+`flip`, `flop`, `grayscale`, `invert`, `blur`, `quality`/`q`, `lossless` and
+`speed`. Three differences are worth knowing:
+
+- **`rotate` takes a quarter turn**, not any angle — `90`, `180`, `270`, a
+  negative or a multiple of those, or `auto` for the EXIF orientation. napi
+  applies one orientation, so mirroring and a turn compose into it (`?flip&flop`
+  is a half turn); asking for `auto` alongside an explicit turn warns, because
+  only one of them can be applied.
+- **Every value is checked here**, rather than left to the library as sharp's
+  are. napi rejects an unknown `fit` without naming it, and answers a quality of
+  150 by silently writing a _bigger_ file, so a value it would mishandle is
+  dropped instead.
+- **Transforming costs the repack.** This minimizer's advantage is rewriting
+  encoded bytes — oxipng saves 99% of a png where decoding and re-encoding saves
+  9% — so when a query makes a transform necessary, its output is handed back to
+  the repack rather than replacing it. A `?rotate=auto` on an image whose EXIF
+  asks for nothing skips the decode entirely.
+
+**`svgoMinify` reads `precision`** (or `floatPrecision`, 0–10), **`multipass`**,
+**`pretty`** and **`indent`**, so one SVG can be laid out readably or coarsened
+without a second configuration:
+
+```js
+import icon from "./icon.svg?precision=1";
+```
+
+**`imageminMinify` reads nothing.** Its options are a list of already-configured
+plugins, each with option names of its own, so there is no parameter a query
+could set that would mean the same thing twice over.
 
 > **Note**
 >
