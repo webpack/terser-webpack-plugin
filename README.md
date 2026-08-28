@@ -14,7 +14,7 @@
 # minimizer-webpack-plugin
 
 This plugin minifies your assets in a webpack build. It ships with several
-built-in minimizers covering JavaScript, JSON, HTML, and CSS — pick one
+built-in minimizers covering JavaScript, JSON, HTML, CSS, and images — pick one
 with the [`minify`](#minify) option and target the right files with
 [`test`](#test).
 
@@ -43,6 +43,15 @@ CSS minimizers:
 - [`esbuild`](https://github.com/evanw/esbuild) — `MinimizerPlugin.esbuildMinifyCss`. Very fast CSS minification using esbuild's CSS loader. Requires `npm install --save-dev esbuild`.
 - [`lightningcss`](https://github.com/parcel-bundler/lightningcss) — `MinimizerPlugin.lightningCssMinify`. A Rust-based CSS parser, transformer, and minifier. Requires `npm install --save-dev lightningcss`.
 - [`@swc/css`](https://github.com/swc-project/swc) — `MinimizerPlugin.swcMinifyCss`. A very fast Rust-based CSS minifier. Requires `npm install --save-dev @swc/css`.
+
+Image minimizers:
+
+- [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize or rotate on the way. Requires `npm install --save-dev sharp`.
+- [`svgo`](https://github.com/svg/svgo) — `MinimizerPlugin.svgoMinify`. Minifies SVG, including an `asset/inline` SVG that no `test` can match. Requires `npm install --save-dev svgo`.
+- [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin.
+
+These only minify — they never change an image's format or name; see
+[Images](#images).
 
 All of the non-default minimizers are declared as **optional** peer
 dependencies — install only the ones you actually use. You can also stack
@@ -391,6 +400,12 @@ minify.getMinimizerVersion = () => {
 // minimizers is used) dispatches each asset only to the minimizers that
 // accept it. Returning `undefined` is treated as accept.
 minify.filter = (name) => /\.[cm]?js(\?.*)?$/i.test(name);
+
+// Declare this when the minimizer reads the asset's bytes rather than its
+// text — an image minimizer. Its `input` values then arrive as a `Buffer` and
+// its `code` may be one. Only applied when every minimizer an asset is
+// dispatched to declares it, since one that does not could not read the bytes.
+minify.supportsBinary = () => true;
 
 module.exports = {
   optimization: {
