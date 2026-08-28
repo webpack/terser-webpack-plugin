@@ -4,6 +4,17 @@ import MinimizerPlugin from "../src";
 
 import { compile, getCompiler, getErrors, getWarnings } from "./helpers";
 
+/**
+ * Stands in for a real minimizer: what is under test is which assets are
+ * offered, not what any minimizer makes of them. Self-contained, so it survives
+ * being serialized into the worker, and free of any dependency the legacy Node
+ * rows cannot load.
+ * @returns {Promise<{ code: string }>} a fixed, shorter result
+ */
+const shorten = async () => ({ code: "min" });
+
+const MINIFIED = 3;
+
 // `output.assetModuleFilename` is `[hash][ext][query][fragment]` by default, so
 // an asset imported with a query carries it in its emitted name. A rule naming
 // the file has to accept it anyway.
@@ -38,10 +49,14 @@ async function build(options, assetModuleFilename = "[name][ext][query]") {
     .toJson({ all: false, assets: true })
     .assets.filter((asset) => !asset.name.endsWith(".js"));
 
-  return {
-    names: assets.map((asset) => asset.name),
-    sizes: Object.fromEntries(assets.map((asset) => [asset.name, asset.size])),
-  };
+  /** @type {{ [name: string]: number }} */
+  const sizes = {};
+
+  for (const asset of assets) {
+    sizes[asset.name] = asset.size;
+  }
+
+  return { names: assets.map((asset) => asset.name), sizes };
 }
 
 const ORIGINAL = 302;
@@ -50,7 +65,7 @@ describe("a query in the asset name", () => {
   it("should be carried by the emitted name", async () => {
     const { names } = await build({
       test: /\.nothing$/,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
     expect(names).toEqual(["image.svg?v=2"]);
@@ -60,28 +75,28 @@ describe("a query in the asset name", () => {
     const { sizes } = await build({
       // Without the fix this matches nothing: the name ends in `?v=2`.
       test: /\.svg$/i,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
-    expect(sizes["image.svg?v=2"]).toBeLessThan(ORIGINAL);
+    expect(sizes["image.svg?v=2"]).toBe(MINIFIED);
   });
 
   it("should still accept a `test` written for the query form", async () => {
     const { sizes } = await build({
       test: /\.svg(\?.*)?$/i,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
-    expect(sizes["image.svg?v=2"]).toBeLessThan(ORIGINAL);
+    expect(sizes["image.svg?v=2"]).toBe(MINIFIED);
   });
 
   it("should let a `test` name the query itself", async () => {
     const { sizes } = await build({
       test: /\?v=2$/,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
-    expect(sizes["image.svg?v=2"]).toBeLessThan(ORIGINAL);
+    expect(sizes["image.svg?v=2"]).toBe(MINIFIED);
   });
 
   it.each([
@@ -92,7 +107,7 @@ describe("a query in the asset name", () => {
     const { sizes } = await build({
       test: /\.svg(\?.*)?$/i,
       exclude,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
     expect(sizes["image.svg?v=2"]).toBe(ORIGINAL);
@@ -102,17 +117,17 @@ describe("a query in the asset name", () => {
     const { sizes } = await build({
       test: /\.svg(\?.*)?$/i,
       include: /image\.svg$/i,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
-    expect(sizes["image.svg?v=2"]).toBeLessThan(ORIGINAL);
+    expect(sizes["image.svg?v=2"]).toBe(MINIFIED);
   });
 
   it("should not minify an asset no `include` accepts", async () => {
     const { sizes } = await build({
       test: /\.svg(\?.*)?$/i,
       include: /somewhere-else/,
-      minify: MinimizerPlugin.svgoMinify,
+      minify: shorten,
     });
 
     expect(sizes["image.svg?v=2"]).toBe(ORIGINAL);
@@ -120,11 +135,11 @@ describe("a query in the asset name", () => {
 
   it("should read the extension past a fragment as well", async () => {
     const { names, sizes } = await build(
-      { test: /\.svg$/i, minify: MinimizerPlugin.svgoMinify },
+      { test: /\.svg$/i, minify: shorten },
       "[name][ext][query][fragment]",
     );
 
     expect(names).toEqual(["image.svg?v=2"]);
-    expect(sizes["image.svg?v=2"]).toBeLessThan(ORIGINAL);
+    expect(sizes["image.svg?v=2"]).toBe(MINIFIED);
   });
 });
