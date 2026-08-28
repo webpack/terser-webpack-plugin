@@ -2022,6 +2022,66 @@ function extensionOf(name) {
 }
 
 /**
+ * The resize an asset's name asks for, merged over the configured one.
+ *
+ * `output.assetModuleFilename` carries the request's query into the emitted
+ * name, so `import banner from "./banner.png?width=320"` arrives here as
+ * `banner.png?width=320`. `w`, `h` and `u` are accepted as short forms, `auto`
+ * drops a configured dimension, and the query wins over the configuration
+ * because it is the more specific of the two.
+ *
+ * Resizing needs no new name — the asset keeps the one it already has — which
+ * is why it can be read here rather than in a loader, unlike `?as=`.
+ * @param {string} name asset name
+ * @param {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean }=} resize the configured resize
+ * @returns {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean } | undefined} what to resize to, or undefined when neither asks for one
+ */
+function resizeWithQuery(name, resize) {
+  const queryIndex = name.indexOf("?");
+
+  if (queryIndex === -1) {
+    return resize;
+  }
+
+  const query = new URLSearchParams(name.slice(queryIndex + 1));
+  const merged = { ...resize };
+  let asked = false;
+
+  for (const dimension of /** @type {("width" | "height")[]} */ ([
+    "width",
+    "height",
+  ])) {
+    const value = query.get(dimension) || query.get(dimension[0]);
+
+    if (value === null) {
+      continue;
+    }
+
+    asked = true;
+
+    if (value === "auto") {
+      delete merged[dimension];
+      continue;
+    }
+
+    const size = Number.parseInt(value, 10);
+
+    if (Number.isFinite(size) && size > 0) {
+      merged[dimension] = size;
+    }
+  }
+
+  const unit = query.get("unit") || query.get("u");
+
+  if (unit === "px" || unit === "percent") {
+    merged.unit = unit;
+    asked = true;
+  }
+
+  return asked || resize ? merged : undefined;
+}
+
+/**
  * The bytes of what a binary minimizer was handed. Its source may reach it as
  * text when the asset was built as one, so this is the one place that decides.
  *
@@ -2069,7 +2129,7 @@ const SHARP_MINIFY_FORMATS = new Map([
 async function sharpMinify(input, sourceMap, minimizerOptions) {
   /**
    * @typedef {object} SharpMinifyOptions
-   * @property {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean }=} resize resize the image before re-encoding it
+   * @property {{ width?: number, height?: number, unit?: "px" | "percent", enabled?: boolean }=} resize resize the image before re-encoding it. A `?width=`/`?height=`/`?unit=` in the asset's name overrides what is set here
    * @property {number | "auto"=} rotate rotate by an angle, or by what the EXIF orientation says
    * @property {{ [format: string]: EXPECTED_OBJECT }=} encodeOptions per-format options, keyed by sharp's format name
    */
@@ -2096,8 +2156,10 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
     pipeline.rotate();
   }
 
-  if (options.resize) {
-    const { enabled = true, unit = "px", ...params } = options.resize;
+  const requestedResize = resizeWithQuery(name, options.resize);
+
+  if (requestedResize) {
+    const { enabled = true, unit = "px", ...params } = requestedResize;
 
     if (
       enabled &&

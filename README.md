@@ -1711,16 +1711,58 @@ test: /\?v=2$/; // names the query itself
 the queried asset. Every built-in minimizer's own `filter` reads past the query
 in the same way.
 
+**Sizing one image from its import.** `sharpMinify` reads `width`, `height` and
+`unit` off the asset's name, so a single image can be resized where it is
+imported rather than in the configuration:
+
+```js
+import banner from "./banner.png?width=320";
+```
+
+| Query                    | Result                                  |
+| ------------------------ | --------------------------------------- |
+| `?width=320`             | 320px wide, height to match             |
+| `?w=64&h=64`             | exactly 64x64                           |
+| `?width=50&unit=percent` | half the original width                 |
+| `?width=auto`            | drops a width set in `minimizerOptions` |
+
+`w`, `h` and `u` are accepted as short forms, `unit` is `px` (the default) or
+`percent`, and `auto` drops a dimension set in `minimizerOptions.resize`. The
+query wins over the configuration, being the more specific of the two;
+`resize: { enabled: false }` still turns resizing off entirely. A value that is
+not a positive number is ignored, as is any other query parameter.
+
+Only `sharpMinify` reads these — it is the only bundled minimizer that resizes.
+
 > **Note**
 >
-> A query cannot **configure** a minimizer here. `?as=webp`, `?width=100` and
-> the like are read by
+> Two assets whose names differ only by their query would be written to the same
+> file, and webpack refuses that. To emit several sizes of one image, give each
+> its own file name **and** keep the query on the asset name:
+>
+> ```js
+> module.exports = {
+>   output: {
+>     assetModuleFilename: (pathData) => {
+>       const query = pathData.module.resourceResolveData.query || "";
+>       const name = query.replace(/^\?/, "-").replace(/[=&]/g, "-");
+>
+>       return `[name]${name}[ext][query]`;
+>     },
+>   },
+> };
+> ```
+>
+> Without the trailing `[query]` the size is no longer on the name and nothing
+> resizes; without the first half the two sizes collide.
+
+> **Note**
+>
+> A query cannot pick a **format** here. `?as=webp` is read by
 > [`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)'s
-> loader, which sees the import before an asset exists and can therefore emit a
-> different file for it. This plugin runs after the assets are built, where
-> there is no import left to read and no way to rename what it produces — so a
-> query here only ever names an asset, it never changes what a minimizer does to
-> it. Per-image settings belong in that plugin.
+> loader, which sees the import before an asset exists and can emit a different
+> file for it. Resizing needs no new name, which is why it works here; changing
+> the format does, and this plugin runs after names are decided.
 
 #### Images beside everything else
 

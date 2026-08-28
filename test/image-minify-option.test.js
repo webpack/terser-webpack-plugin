@@ -199,6 +199,112 @@ describe("image minify option", () => {
     compiler.close(() => {});
   });
 
+  it.each([
+    ["?width=64", {}, [64, 32]],
+    ["?w=64", {}, [64, 32]],
+    ["?height=25", {}, [50, 25]],
+    // Both given: sharp's default `fit` honours each exactly.
+    ["?width=64&height=25", {}, [64, 25]],
+    ["?width=50&unit=percent", {}, [100, 50]],
+    ["?w=50&u=percent", {}, [100, 50]],
+    // Neither a size nor a number, so neither is read as one.
+    ["?v=2", {}, [200, 100]],
+    ["?width=nonsense", {}, [200, 100]],
+    ["?width=-5", {}, [200, 100]],
+    // The query is the more specific of the two, so it wins.
+    ["?width=64", { resize: { width: 10 } }, [64, 32]],
+    // `auto` drops a configured dimension and leaves the other.
+    ["?width=auto", { resize: { width: 10, height: 30 } }, [60, 30]],
+    // Turning resizing off is the configuration's to decide, not the query's.
+    ["?width=64", { resize: { enabled: false } }, [200, 100]],
+  ])(
+    "should read the size %s off the asset name",
+    async (query, options, [width, height]) => {
+      const sharp = require("sharp");
+
+      const input = await sharp({
+        create: {
+          width: 200,
+          height: 100,
+          channels: 3,
+          background: { r: 9, g: 9, b: 9 },
+        },
+      })
+        .png()
+        .toBuffer();
+
+      const { code } = await MinimizerPlugin.sharpMinify(
+        { [`wide.png${query}`]: input },
+        undefined,
+        options,
+      );
+
+      await expect(sharp(code).metadata()).resolves.toMatchObject({
+        width,
+        height,
+      });
+    },
+  );
+
+  it("should resize through a real build, and keep each size its own file", async () => {
+    const sharp = require("sharp");
+
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/sized-images.js"),
+      output: {
+        pathinfo: false,
+        path: path.resolve(__dirname, "dist"),
+        filename: "[name].js",
+        // The file name has to distinguish the sizes, and the asset name has to
+        // keep the query for it to be read at all.
+        assetModuleFilename: (pathData) => {
+          const query =
+            (pathData.module &&
+              pathData.module.resourceResolveData &&
+              pathData.module.resourceResolveData.query) ||
+            "";
+
+          return `[name]${query.replace(/^\?/, "-").replace(/[=&]/g, "-")}[ext][query]`;
+        },
+      },
+      module: {
+        rules: [
+          { test: /\.png$/i, type: "asset/resource" },
+          { test: /\.svg$/i, type: "asset/resource" },
+        ],
+      },
+    });
+
+    new MinimizerPlugin({
+      test: /\.png$/i,
+      minify: MinimizerPlugin.sharpMinify,
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toEqual([]);
+
+    const sizes = {};
+
+    for (const asset of stats
+      .toJson({ all: false, assets: true })
+      .assets.filter((item) => !item.name.endsWith(".js"))) {
+      const onDisk = asset.name.replace(/[?#].*$/, "");
+      const { width, height } = await sharp(
+        readBytes(compiler, stats, onDisk),
+      ).metadata();
+
+      sizes[asset.name] = `${width}x${height}`;
+    }
+
+    expect(sizes).toEqual({
+      "image-width-64.png?width=64": "64x64",
+      "image-height-20.png?height=20": "20x20",
+      "image.png": "120x120",
+    });
+  });
+
   it("should work when the `minify` option is `svgoMinify`", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/images.js"),
