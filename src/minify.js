@@ -311,6 +311,8 @@ async function minify(options) {
 
   /** @type {string | Buffer | undefined} */
   let lastCode;
+  /** @type {string | undefined} */
+  let lastFilename;
   /** @type {RawSourceMap | undefined} */
   let lastMap;
   /** @type {(Error | string)[]} */
@@ -503,6 +505,12 @@ async function minify(options) {
       extractedComments.push(...result.extractedComments);
     }
 
+    // A minimizer that re-encoded the bytes into another format says what the
+    // result is now called; across a chain the last such answer wins.
+    if (typeof result.filename === "string") {
+      lastFilename = result.filename;
+    }
+
     if (typeof result.code === "string" || Buffer.isBuffer(result.code)) {
       lastCode = result.code;
       // The minimizer's output map is `name → step-output`. Chain it with
@@ -516,6 +524,9 @@ async function minify(options) {
 
   return {
     code: lastCode,
+    // Only when one was named: almost nothing re-encodes into another format,
+    // and an always-present `filename: undefined` is in every result's shape.
+    ...(typeof lastFilename === "string" ? { filename: lastFilename } : {}),
     map: lastMap,
     warnings,
     errors,
