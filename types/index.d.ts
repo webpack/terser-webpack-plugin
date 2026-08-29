@@ -346,7 +346,7 @@ type LoaderResult = [
 ];
 /**
  * The `NormalModule` hook this plugin generates through. Declared here for the
- * same reason as `EmbeddedSourceHooks`: it can await only from webpack 5.110,
+ * same reason as `EmbeddedSourceHooks`: it can await only from webpack 5.111,
  * and the supported range's types still describe it as synchronous.
  */
 type AwaitableModuleHooks = {

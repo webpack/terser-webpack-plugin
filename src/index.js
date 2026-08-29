@@ -111,7 +111,7 @@ const {
 
 /**
  * The `NormalModule` hook this plugin generates through. Declared here for the
- * same reason as `EmbeddedSourceHooks`: it can await only from webpack 5.110,
+ * same reason as `EmbeddedSourceHooks`: it can await only from webpack 5.111,
  * and the supported range's types still describe it as synchronous.
  * @typedef {object} AwaitableModuleHooks
  * @property {{ tapPromise: (name: string, fn: (result: LoaderResult, module: import("webpack").NormalModule) => Promise<LoaderResult>) => void }} processResult offers each module's own bytes as it is built
@@ -1527,7 +1527,7 @@ class TerserPlugin {
           compilation.errors.push(
             TerserPlugin.buildError(
               new Error(
-                `The \`generate\` option needs webpack >= 5.110, where \`NormalModule\`'s \`processResult\` hook can await: ${
+                `The \`generate\` option needs a webpack whose \`NormalModule\` \`processResult\` hook can await (>= 5.111); this one cannot: ${
                   /** @type {Error} */ (error).message
                 }`,
               ),
