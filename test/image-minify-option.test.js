@@ -457,6 +457,38 @@ describe("image minify option", () => {
     );
   });
 
+  it("should not offer `sharpMinify` a raw asset it could only fail on", async () => {
+    // Bare pixels carry no header, so sharp cannot read one back — offering
+    // it one fails the build rather than minifying anything.
+    expect(MinimizerPlugin.sharpMinify.filter("pixels.raw")).toBe(false);
+
+    const pixels = Buffer.alloc(32 * 32 * 3, 7);
+
+    await expect(require("sharp")(pixels).metadata()).rejects.toThrow(
+      /unsupported image format/,
+    );
+  });
+
+  it("should keep an image a plugin turned into SVG", async () => {
+    // The other direction of the same guard. SVG carries no signature, so
+    // until it was read as the markup it is, a conversion *into* it named
+    // nothing, the mismatch went unseen, and SVG was written out under a name
+    // claiming a raster format.
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect x="1.00000"/></svg>',
+    );
+    const { code, warnings } = await MinimizerPlugin.imageminMinify(
+      { "photo.png": svg },
+      undefined,
+      { plugins: ["svgo"] },
+    );
+
+    expect(code).toEqual(svg);
+    expect(warnings.join("\n")).toContain(
+      'does not support generating "svg" from "photo.png"',
+    );
+  });
+
   it("should throw when `imageminMinify` has no plugins", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/images.js"),
