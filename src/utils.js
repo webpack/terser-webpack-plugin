@@ -3335,6 +3335,7 @@ module.exports = {
   minifyHtmlNode,
   napiRsImageMinify,
   packageVersion,
+  replaceExtension,
   sharpGenerate,
   sharpMinify,
   svgoMinify,

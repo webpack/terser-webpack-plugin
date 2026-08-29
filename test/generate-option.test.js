@@ -1,6 +1,7 @@
 import path from "path";
 
 import MinimizerPlugin from "../src";
+import { replaceExtension } from "../src/utils";
 
 import { compile, getCompiler, getErrors, getWarnings } from "./helpers";
 
@@ -32,7 +33,7 @@ function toWebp(input) {
 
   return {
     code: Buffer.concat([Buffer.from("WEBP:"), Buffer.from(code)]),
-    filename: name.replace(/\.jpe?g$/i, ".webp"),
+    filename: replaceExtension(name, "webp"),
   };
 }
 
@@ -87,6 +88,37 @@ describe("generate option", () => {
 
     expect(bundle).toContain('"image.webp"');
     expect(bundle).not.toContain('"image.jpg"');
+  });
+
+  it("should keep the query and fragment the request carried", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/query-image.js"),
+      module: {
+        rules: [
+          {
+            test: /\.(png|jpe?g|svg|webp)/i,
+            type: "asset/resource",
+            generator: { filename: "[name][ext][query][fragment]" },
+          },
+        ],
+      },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g/i, generate: toWebp }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    if (!CAN_AWAIT) {
+      expect(getErrors(stats).join("\n")).toMatch(/needs webpack >= 5\.110/);
+
+      return;
+    }
+
+    const names = Object.keys(stats.compilation.assets);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(names).toContain("image.webp?w=100#frag");
+    expect(names).not.toContain("image.jpg?w=100#frag");
   });
 
   it("should leave assets the filters reject alone", async () => {
@@ -149,5 +181,20 @@ describe("sharpGenerate target format", () => {
 
     expect(result.errors).toHaveLength(1);
     expect(String(result.errors[0])).toMatch(/does not write 'bmp'/);
+  });
+});
+
+describe("replaceExtension", () => {
+  it.each([
+    ["a/photo.jpg", "webp", "a/photo.webp"],
+    // The request's query and fragment name the asset too, so only the
+    // extension is the encoder's to change.
+    ["photo.jpeg?w=100", "webp", "photo.webp?w=100"],
+    ["a/b.png#frag", "avif", "a/b.avif#frag"],
+    ["photo.png?w=1#frag", "webp", "photo.webp?w=1#frag"],
+    // A dot in a directory name is not an extension.
+    ["dir.x/readme", "png", "dir.x/readme.png"],
+  ])("should rewrite %s to .%s", (name, extension, expected) => {
+    expect(replaceExtension(name, extension)).toBe(expected);
   });
 });

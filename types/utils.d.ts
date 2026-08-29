@@ -446,6 +446,14 @@ export namespace napiRsImageMinify {
  */
 export function packageVersion(name: string): string | undefined;
 /**
+ * Replace a name's extension, keeping any query and fragment: the request that
+ * asked for the conversion is still part of what the asset is named after.
+ * @param {string} name asset name
+ * @param {string} extension the new extension, without a dot
+ * @returns {string} the renamed asset
+ */
+export function replaceExtension(name: string, extension: string): string;
+/**
  * Re-encode an image as another format with `sharp`, renaming it to match.
  *
  * The format is asked for by the asset's own name — `?as=webp` — or by the one
