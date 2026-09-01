@@ -1,8 +1,42 @@
+import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
+
 import { transform } from "../src/minify.js";
 import serialize from "../src/serialize-javascript.js";
 import { terserMinify } from "../src/utils.js";
 
+// cspell:ignore KAAK
 describe("worker", () => {
+  it("preserves unmapped regions when composing source maps", async () => {
+    const options = {
+      name: "bundle.js",
+      input: "const value = generated();",
+      inputSourceMap: {
+        version: 3,
+        sources: ["original.js"],
+        names: [],
+        mappings: "AAAA,K",
+      },
+      minimizer: {
+        implementation: async (input) => ({
+          code: Object.values(input)[0],
+          map: {
+            version: 3,
+            sources: ["bundle.js"],
+            names: [],
+            mappings: "AAAA,KAAK",
+          },
+        }),
+      },
+    };
+    const workerResult = await transform(serialize(options));
+    const position = originalPositionFor(new TraceMap(workerResult.map), {
+      line: 1,
+      column: 5,
+    });
+
+    expect(position.source).toBeNull();
+  });
+
   it('should match snapshot when options.extractComments is "false"', async () => {
     const options = {
       name: "test1.js",

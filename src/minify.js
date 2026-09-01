@@ -231,6 +231,7 @@ function composeSourceMaps(currentMap, prevMap, name) {
           orig.line == null ||
           orig.column == null
         ) {
+          newSegments.push([seg[0]]);
           continue;
         }
 
