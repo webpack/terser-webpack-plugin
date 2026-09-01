@@ -144,7 +144,7 @@ function composeSourceMaps(currentMap, prevMap, name) {
 
   /**
    * @param {string | null | undefined} source source identifier
-   * @param {string | undefined} content source content (when available)
+   * @param {string | null | undefined} content source content (when available)
    * @returns {number} index assigned in the composed map
    */
   const getSourceIdx = (source, content) => {
@@ -234,7 +234,7 @@ function composeSourceMaps(currentMap, prevMap, name) {
           continue;
         }
 
-        const content = sourceContentFor(previous, orig.source) || undefined;
+        const content = sourceContentFor(previous, orig.source);
         const newSrcIdx = getSourceIdx(orig.source, content);
         const finalName =
           typeof orig.name === "string" && orig.name ? orig.name : segName;
@@ -251,7 +251,7 @@ function composeSourceMaps(currentMap, prevMap, name) {
           newSegments.push([seg[0], newSrcIdx, orig.line - 1, orig.column]);
         }
       } else {
-        const content = sourceContentFor(current, sourceName) || undefined;
+        const content = sourceContentFor(current, sourceName);
         const newSrcIdx = getSourceIdx(sourceName, content);
 
         if (typeof segName === "string") {

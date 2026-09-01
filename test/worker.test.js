@@ -3,6 +3,34 @@ import serialize from "../src/serialize-javascript.js";
 import { terserMinify } from "../src/utils.js";
 
 describe("worker", () => {
+  it("preserves empty source content when composing source maps", async () => {
+    const options = {
+      name: "bundle.js",
+      input: "x",
+      inputSourceMap: {
+        version: 3,
+        sources: ["empty.js"],
+        sourcesContent: [""],
+        names: [],
+        mappings: "AAAA",
+      },
+      minimizer: {
+        implementation: async (input) => ({
+          code: Object.values(input)[0],
+          map: {
+            version: 3,
+            sources: ["bundle.js"],
+            names: [],
+            mappings: "AAAA",
+          },
+        }),
+      },
+    };
+    const workerResult = await transform(serialize(options));
+
+    expect(workerResult.map.sourcesContent).toEqual([""]);
+  });
+
   it('should match snapshot when options.extractComments is "false"', async () => {
     const options = {
       name: "test1.js",
