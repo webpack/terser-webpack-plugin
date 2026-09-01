@@ -3,6 +3,23 @@ import serialize from "../src/serialize-javascript.js";
 import { terserMinify } from "../src/utils.js";
 
 describe("worker", () => {
+  it("preserves an explicit false module option", async () => {
+    const options = {
+      name: "test.mjs",
+      input: "export default 1;",
+      module: true,
+      minimizer: {
+        implementation: async (...args) => ({
+          code: String(args[2].module),
+        }),
+        options: { module: false },
+      },
+    };
+    const workerResult = await transform(serialize(options));
+
+    expect(workerResult.code).toBe("false");
+  });
+
   it('should match snapshot when options.extractComments is "false"', async () => {
     const options = {
       name: "test1.js",

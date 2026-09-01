@@ -477,7 +477,10 @@ async function minify(options) {
       /** @type {import("./index.js").MinimizerOptions<T>} */
       ({
         ...baseOptions,
-        module: baseOptions.module || module,
+        module:
+          typeof baseOptions.module === "undefined"
+            ? module
+            : baseOptions.module,
         ecma: baseOptions.ecma || ecma,
         // Only for a minimizer that says it reads the option: every other one is
         // handed its own options untouched, so nothing sees a key it does not know.
