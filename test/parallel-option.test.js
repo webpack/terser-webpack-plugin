@@ -29,6 +29,7 @@ jest.mock("os", () => {
 // Based on https://github.com/facebook/jest/blob/edde20f75665c2b1e3c8937f758902b5cf28a7b4/packages/jest-runner/src/__tests__/test_runner.test.js
 let workerTransform;
 let workerEnd;
+let mockWorkerTransformImplementation;
 
 const ENABLE_WORKER_THREADS =
   typeof process.env.ENABLE_WORKER_THREADS !== "undefined"
@@ -38,7 +39,9 @@ const ENABLE_WORKER_THREADS =
 jest.mock("jest-worker", () => ({
   Worker: jest.fn().mockImplementation((workerPath) => ({
     transform: (workerTransform = jest.fn((data) =>
-      require(workerPath).transform(data),
+      mockWorkerTransformImplementation
+        ? mockWorkerTransformImplementation(data)
+        : require(workerPath).transform(data),
     )),
     end: (workerEnd = jest.fn()),
     getStderr: jest.fn(),
@@ -61,6 +64,7 @@ describe("parallel option", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockWorkerTransformImplementation = undefined;
 
     compiler = getCompiler({
       entry: {
@@ -122,6 +126,19 @@ describe("parallel option", () => {
     expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
     expect(getErrors(stats)).toMatchSnapshot("errors");
     expect(getWarnings(stats)).toMatchSnapshot("warnings");
+  });
+
+  it("should end the worker when result processing fails", async () => {
+    mockWorkerTransformImplementation = async () => ({
+      get code() {
+        throw new Error("result processing failed");
+      },
+    });
+
+    new MinimizerPlugin().apply(compiler);
+
+    await expect(compile(compiler)).rejects.toThrow("result processing failed");
+    expect(workerEnd).toHaveBeenCalledTimes(1);
   });
 
   it('should match snapshot for the "undefined" value', async () => {

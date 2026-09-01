@@ -931,10 +931,12 @@ class TerserPlugin {
               optimizeOptions.availableNumberOfCores,
             )
           : scheduledTasks.length;
-    await throttleAll(limit, scheduledTasks);
-
-    if (initializedWorker) {
-      await initializedWorker.end();
+    try {
+      await throttleAll(limit, scheduledTasks);
+    } finally {
+      if (initializedWorker) {
+        await initializedWorker.end();
+      }
     }
 
     /** @typedef {{ source: import("webpack").sources.Source, commentsFilename: string, from: string }} ExtractedCommentsInfoWithFrom */
