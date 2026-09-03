@@ -49,6 +49,20 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private options;
   /**
+   * Whether `test`, `include` and `exclude` accept a name.
+   *
+   * An asset name carries the query and fragment of the request that made it
+   * — `output.assetModuleFilename` is `[hash][ext][query][fragment]` by
+   * default — so `test: /\.png$/` would match none of them. Both spellings
+   * are offered: a rule naming the file accepts it whatever it carries, and
+   * one naming the query still works.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {string} name asset name, or a module's resource
+   * @returns {boolean} true when it is to be minified
+   */
+  private matchesName;
+  /**
    * @private
    * @param {Compiler} compiler compiler
    * @param {Compilation} compilation compilation
@@ -91,6 +105,21 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private renderEmbeddedSource;
   /**
+   * Rewrite one module's own bytes as it is built, which is where an asset can
+   * still be renamed: its emitted name and its hash are both read afterwards,
+   * so a re-encoding that changes the format changes the extension with it.
+   * `processAssets` is too late for that — the bundle already refers to the
+   * name the asset had.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {import("webpack").sources.Source} variesOn everything the answer varies on beyond the bytes themselves
+   * @param {LoaderResult} result what the loaders produced
+   * @param {import("webpack").NormalModule} module the module being built
+   * @returns {Promise<LoaderResult>} the result, rewritten or as it came
+   */
+  private generate;
+  /**
    * Validates the options the plugin was constructed with.
    * @private
    * @param {Compiler} compiler compiler
@@ -124,6 +153,7 @@ declare namespace TerserPlugin {
     imageminNormalizeConfig,
     napiRsImageMinify,
     sharpMinify,
+    sharpGenerate,
     svgoMinify,
     Schema,
     Compiler,
@@ -147,6 +177,8 @@ declare namespace TerserPlugin {
     ErrorObject,
     EmbeddedSourceInfo,
     EmbeddedSourceHooks,
+    LoaderResult,
+    AwaitableModuleHooks,
     MinimizedResult,
     Input,
     CustomOptions,
@@ -182,6 +214,7 @@ import { imageminMinify } from "./utils";
 import { imageminNormalizeConfig } from "./utils";
 import { napiRsImageMinify } from "./utils";
 import { sharpMinify } from "./utils";
+import { sharpGenerate } from "./utils";
 import { svgoMinify } from "./utils";
 type Schema = import("schema-utils/declarations/validate").Schema;
 type Compiler = import("webpack").Compiler;
@@ -303,11 +336,42 @@ type EmbeddedSourceHooks = {
       }
     | undefined;
 };
+/**
+ * What the loaders produced for one module, as `processResult` hands it over.
+ */
+type LoaderResult = [
+  string | Buffer,
+  string | RawSourceMap | undefined,
+  EXPECTED_ANY,
+];
+/**
+ * The `NormalModule` hook this plugin generates through. Declared here for the
+ * same reason as `EmbeddedSourceHooks`: it can await only from webpack 5.111,
+ * and the supported range's types still describe it as synchronous.
+ */
+type AwaitableModuleHooks = {
+  /**
+   * offers each module's own bytes as it is built
+   */
+  processResult: {
+    tapPromise: (
+      name: string,
+      fn: (
+        result: LoaderResult,
+        module: import("webpack").NormalModule,
+      ) => Promise<LoaderResult>,
+    ) => void;
+  };
+};
 type MinimizedResult = {
   /**
    * code — a `Buffer` from a minimizer that declares `supportsBinary`
    */
   code?: (string | Buffer) | undefined;
+  /**
+   * the name the result should carry, when re-encoding it changed what the bytes are. Only the `generate` path can honour it: an asset is named while its module is built, before anything downstream refers to it
+   */
+  filename?: string | undefined;
   /**
    * source map
    */
@@ -450,6 +514,14 @@ type BasePluginOptions = {
    * parallel option
    */
   parallel?: Parallel | undefined;
+  /**
+   * rewrites a module's own bytes as it is built, so a re-encoding can rename the asset
+   */
+  generate?: MinimizerImplementation<EXPECTED_ANY> | undefined;
+  /**
+   * options for `generate`
+   */
+  generatorOptions?: MinimizerOptions<EXPECTED_ANY> | undefined;
 };
 type DefinedDefaultMinimizerAndOptions<T> =
   T extends import("terser").MinifyOptions
@@ -465,6 +537,10 @@ type DefinedDefaultMinimizerAndOptions<T> =
       };
 type InternalPluginOptions<T> = BasePluginOptions & {
   minimizer: {
+    implementation: MinimizerImplementation<T>;
+    options: MinimizerOptions<T>;
+  };
+  generator?: {
     implementation: MinimizerImplementation<T>;
     options: MinimizerOptions<T>;
   };

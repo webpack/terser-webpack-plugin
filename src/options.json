@@ -200,6 +200,40 @@
           }
         }
       ]
+    },
+    "generate": {
+      "description": "Rewrites a module's own bytes as it is built, which is what lets it be re-encoded into another format and renamed.",
+      "link": "https://github.com/webpack/minimizer-webpack-plugin#generate",
+      "anyOf": [
+        {
+          "instanceof": "Function"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "instanceof": "Function"
+          }
+        }
+      ]
+    },
+    "generatorOptions": {
+      "description": "Options for the `generate` function.",
+      "link": "https://github.com/webpack/minimizer-webpack-plugin#generatoroptions",
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        }
+      ]
     }
   }
 }

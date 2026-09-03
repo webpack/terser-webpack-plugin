@@ -2095,7 +2095,7 @@ function readText(value) {
  * per format: `effort` runs to 6 for webp and 9 for avif, `fit` and `position`
  * are enums it owns, and a colour is whatever it can parse. Enumerating any of
  * that here would be a second, staler copy of sharp's own validation.
- * @type {{ spellings: string[], group: "resize" | "pipeline" | "encode", name: string, read: (value: string) => EXPECTED_ANY }[]}
+ * @type {{ spellings: string[], group: "resize" | "pipeline" | "encode" | "output", name: string, read: (value: string) => EXPECTED_ANY }[]}
  */
 const SHARP_QUERY_PARAMETERS = [
   {
@@ -2109,6 +2109,12 @@ const SHARP_QUERY_PARAMETERS = [
     group: "resize",
     name: "height",
     read: readDimension,
+  },
+  {
+    spellings: ["as", "format"],
+    group: "output",
+    name: "format",
+    read: readText,
   },
   { spellings: ["unit", "u"], group: "resize", name: "unit", read: readUnit },
   { spellings: ["fit"], group: "resize", name: "fit", read: readText },
@@ -2335,15 +2341,40 @@ const SHARP_MINIFY_FORMATS = new Map([
   ["webp", "webp"],
 ]);
 
+/**
+ * Which sharp format each spelling of a target names. Derived from the read
+ * map, so a format sharp is not offered cannot be asked for either. Both
+ * `webp` and the extensions that alias a format (`jpg`) are accepted, and the
+ * spelling asked for is the extension the result carries.
+ * @type {Map<string, string>}
+ */
+const SHARP_GENERATE_FORMATS = new Map(SHARP_MINIFY_FORMATS);
+
+/**
+ * Replace a name's extension, keeping any query and fragment: the request that
+ * asked for the conversion is still part of what the asset is named after.
+ * @param {string} name asset name
+ * @param {string} extension the new extension, without a dot
+ * @returns {string} the renamed asset
+ */
+function replaceExtension(name, extension) {
+  const suffix = /[?#]/.exec(name);
+  const bare = suffix ? name.slice(0, suffix.index) : name;
+  const rest = suffix ? name.slice(suffix.index) : "";
+  const dot = bare.lastIndexOf(".");
+
+  return `${dot > bare.lastIndexOf("/") ? bare.slice(0, dot) : bare}.${extension}${rest}`;
+}
+
 /* istanbul ignore next */
 /**
- * Minify an image using `sharp`, re-encoding it as its own format.
+ * Re-encode an image with `sharp`, as its own format or as another one.
  * @param {Input} input input
- * @param {RawSourceMap=} sourceMap source map (ignored for images)
  * @param {CustomOptions=} minimizerOptions options
+ * @param {string=} targetFormat the format to write, when it is not the input's own
  * @returns {Promise<MinimizedResult>} minimized result
  */
-async function sharpMinify(input, sourceMap, minimizerOptions) {
+async function sharpTransform(input, minimizerOptions, targetFormat) {
   /**
    * @typedef {object} SharpMinifyOptions
    * @property {(import("sharp").ResizeOptions & { unit?: "px" | "percent", enabled?: boolean })=} resize resize the image before re-encoding it
@@ -2359,11 +2390,18 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
    * `SHARP_QUERY_PARAMETERS` — and the name wins where both say something.
    */
   const [[name, code]] = Object.entries(input);
-  const format = SHARP_MINIFY_FORMATS.get(extensionOf(name));
+  // Minifying writes the input's own format; generating writes the one asked
+  // for, and only needs the input to be readable.
+  const format = targetFormat
+    ? SHARP_GENERATE_FORMATS.get(targetFormat)
+    : SHARP_MINIFY_FORMATS.get(extensionOf(name));
 
-  // `filter` offers only what this map holds, so a name reaching here without
+  // `filter` offers only what these maps hold, so a name reaching here without
   // one came from a caller that dispatched by something else.
-  if (typeof format === "undefined") {
+  if (
+    typeof format === "undefined" ||
+    !SHARP_MINIFY_FORMATS.has(extensionOf(name))
+  ) {
     return { code };
   }
 
@@ -2440,8 +2478,96 @@ async function sharpMinify(input, sourceMap, minimizerOptions) {
     ),
   );
 
-  return { code: await pipeline.toBuffer() };
+  const encoded = await pipeline.toBuffer();
+
+  return targetFormat
+    ? { code: encoded, filename: replaceExtension(name, targetFormat) }
+    : { code: encoded };
 }
+
+/* istanbul ignore next */
+/**
+ * Minify an image using `sharp`, re-encoding it as its own format.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+async function sharpMinify(input, sourceMap, minimizerOptions) {
+  return sharpTransform(input, minimizerOptions);
+}
+
+/* istanbul ignore next */
+/**
+ * Re-encode an image as another format with `sharp`, renaming it to match.
+ *
+ * The format is asked for by the asset's own name — `?as=webp` — or by the one
+ * key of `encodeOptions`, and the name wins where both say something. Naming
+ * neither is an error: there is no format to generate.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+async function sharpGenerate(input, sourceMap, minimizerOptions) {
+  const [[name, code]] = Object.entries(input);
+  const options = minimizerOptions || {};
+  const requested = readQuery(name, SHARP_QUERY_PARAMETER_BY_SPELLING);
+  const named = requested && requested.output && requested.output.format;
+  const keys = Object.keys(options.encodeOptions || {});
+
+  if (!named && keys.length !== 1) {
+    return {
+      code,
+      errors: [
+        new Error(
+          keys.length === 0
+            ? `Error with '${name}': no target format. Ask for one by name (\`?as=webp\`) or give \`encodeOptions\` exactly one format.`
+            : `Error with '${name}': \`encodeOptions\` names ${keys.length} formats (${keys.join(", ")}), so which to generate is ambiguous. Ask for one by name (\`?as=webp\`) or give it exactly one.`,
+        ),
+      ],
+    };
+  }
+
+  const target = /** @type {string} */ (named || keys[0]);
+
+  if (!SHARP_GENERATE_FORMATS.has(target)) {
+    return {
+      code,
+      errors: [
+        new Error(`Error with '${name}': sharp does not write '${target}'.`),
+      ],
+    };
+  }
+
+  return sharpTransform(input, options, target);
+}
+
+/**
+ * @returns {string | undefined} the minimizer version
+ */
+sharpGenerate.getMinimizerVersion = () => packageVersion("sharp");
+
+/**
+ * @returns {boolean} true, images are binary
+ */
+sharpGenerate.supportsBinary = () => true;
+
+/**
+ * @returns {boolean} false, sharp stays in process
+ */
+sharpGenerate.supportsWorker = () => false;
+
+/**
+ * @returns {boolean} false
+ */
+sharpGenerate.supportsWorkerThreads = () => false;
+
+/**
+ * @param {string} name asset name
+ * @returns {boolean} true if sharp can read `name`
+ */
+sharpGenerate.filter = (name) => SHARP_MINIFY_FORMATS.has(extensionOf(name));
 
 /**
  * @returns {string | undefined} the minimizer version
@@ -3209,6 +3335,8 @@ module.exports = {
   minifyHtmlNode,
   napiRsImageMinify,
   packageVersion,
+  replaceExtension,
+  sharpGenerate,
   sharpMinify,
   svgoMinify,
   swcMinify,

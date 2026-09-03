@@ -18,6 +18,7 @@ const {
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  sharpGenerate,
   sharpMinify,
   svgoMinify,
   swcMinify,
@@ -104,8 +105,22 @@ const {
  */
 
 /**
+ * What the loaders produced for one module, as `processResult` hands it over.
+ * @typedef {[string | Buffer, string | RawSourceMap | undefined, EXPECTED_ANY]} LoaderResult
+ */
+
+/**
+ * The `NormalModule` hook this plugin generates through. Declared here for the
+ * same reason as `EmbeddedSourceHooks`: it can await only from webpack 5.111,
+ * and the supported range's types still describe it as synchronous.
+ * @typedef {object} AwaitableModuleHooks
+ * @property {{ tapPromise: (name: string, fn: (result: LoaderResult, module: import("webpack").NormalModule) => Promise<LoaderResult>) => void }} processResult offers each module's own bytes as it is built
+ */
+
+/**
  * @typedef {object} MinimizedResult
  * @property {(string | Buffer)=} code code — a `Buffer` from a minimizer that declares `supportsBinary`
+ * @property {string=} filename the name the result should carry, when re-encoding it changed what the bytes are. Only the `generate` path can honour it: an asset is named while its module is built, before anything downstream refers to it
  * @property {RawSourceMap=} map source map
  * @property {(Error | string)[]=} errors errors
  * @property {(Error | string)[]=} warnings warnings
@@ -185,6 +200,8 @@ const {
  * @property {Rules=} exclude exclude rule
  * @property {ExtractCommentsOptions=} extractComments extract comments options
  * @property {Parallel=} parallel parallel option
+ * @property {MinimizerImplementation<EXPECTED_ANY>=} generate rewrites a module's own bytes as it is built, so a re-encoding can rename the asset
+ * @property {MinimizerOptions<EXPECTED_ANY>=} generatorOptions options for `generate`
  */
 
 /**
@@ -194,7 +211,7 @@ const {
 
 /**
  * @template T
- * @typedef {BasePluginOptions & { minimizer: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> } }} InternalPluginOptions
+ * @typedef {BasePluginOptions & { minimizer: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }, generator?: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> } }} InternalPluginOptions
  */
 
 const VALIDATION_CONFIGURATION = {
@@ -236,6 +253,8 @@ class TerserPlugin {
       parallel = true,
       include,
       exclude,
+      generate,
+      generatorOptions,
     } = this.rawOptions;
 
     // `terserOptions` is a deprecated alias of `minimizerOptions`; prefer the
@@ -262,6 +281,18 @@ class TerserPlugin {
         implementation: minify,
         options: resolvedMinimizerOptions,
       },
+      // Absent unless asked for: it runs while modules build, where the plugin
+      // otherwise does nothing.
+      generator: generate
+        ? {
+            implementation:
+              /** @type {MinimizerImplementation<T>} */
+              (/** @type {unknown} */ (generate)),
+            options:
+              /** @type {MinimizerOptions<T>} */
+              (/** @type {unknown} */ (generatorOptions || {})),
+          }
+        : undefined,
     };
   }
 
@@ -403,6 +434,37 @@ class TerserPlugin {
   }
 
   /**
+   * Whether `test`, `include` and `exclude` accept a name.
+   *
+   * An asset name carries the query and fragment of the request that made it
+   * — `output.assetModuleFilename` is `[hash][ext][query][fragment]` by
+   * default — so `test: /\.png$/` would match none of them. Both spellings
+   * are offered: a rule naming the file accepts it whatever it carries, and
+   * one naming the query still works.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {string} name asset name, or a module's resource
+   * @returns {boolean} true when it is to be minified
+   */
+  matchesName(compiler, name) {
+    const { matchPart } = compiler.webpack.ModuleFilenameHelpers;
+    const bare = name.replace(/[?#].*$/, "");
+    const { test, include, exclude } = this.options;
+
+    if (test && !matchPart(name, test) && !matchPart(bare, test)) {
+      return false;
+    }
+
+    if (include && !matchPart(name, include) && !matchPart(bare, include)) {
+      return false;
+    }
+
+    // Rejecting on either spelling, so naming the file excludes it whatever
+    // it carries and naming the query still excludes it.
+    return !(exclude && (matchPart(name, exclude) || matchPart(bare, exclude)));
+  }
+
+  /**
    * @private
    * @param {Compiler} compiler compiler
    * @param {Compilation} compilation compilation
@@ -414,37 +476,11 @@ class TerserPlugin {
     const cache = compilation.getCache("TerserWebpackPlugin");
     let numberOfAssets = 0;
 
-    const { matchPart } = compiler.webpack.ModuleFilenameHelpers;
     /**
-     * Whether `test`, `include` and `exclude` accept an asset.
-     *
-     * An asset name carries the query and fragment of the request that made it
-     * — `output.assetModuleFilename` is `[hash][ext][query][fragment]` by
-     * default — so `test: /\.png$/` would match none of them. Both spellings
-     * are offered: a rule naming the file accepts it whatever it carries, and
-     * one naming the query still works.
      * @param {string} name asset name
      * @returns {boolean} true when the asset is to be minified
      */
-    const matchesName = (name) => {
-      const bare = name.replace(/[?#].*$/, "");
-      const { test, include, exclude } = this.options;
-
-      if (test && !matchPart(name, test) && !matchPart(bare, test)) {
-        return false;
-      }
-
-      if (include && !matchPart(name, include) && !matchPart(bare, include)) {
-        return false;
-      }
-
-      // Rejecting on either spelling, so naming the file excludes it whatever
-      // it carries and naming the query still excludes it.
-      return !(
-        exclude &&
-        (matchPart(name, exclude) || matchPart(bare, exclude))
-      );
-    };
+    const matchesName = (name) => this.matchesName(compiler, name);
 
     // Normalize the implementation list to an array so dispatch and the
     // worker-pool capability checks below can iterate uniformly. The
@@ -1235,6 +1271,116 @@ class TerserPlugin {
   }
 
   /**
+   * Rewrite one module's own bytes as it is built, which is where an asset can
+   * still be renamed: its emitted name and its hash are both read afterwards,
+   * so a re-encoding that changes the format changes the extension with it.
+   * `processAssets` is too late for that — the bundle already refers to the
+   * name the asset had.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {import("webpack").sources.Source} variesOn everything the answer varies on beyond the bytes themselves
+   * @param {LoaderResult} result what the loaders produced
+   * @param {import("webpack").NormalModule} module the module being built
+   * @returns {Promise<LoaderResult>} the result, rewritten or as it came
+   */
+  async generate(compiler, compilation, variesOn, result, module) {
+    const { generator } = this.options;
+    const resource = module.resource || module.identifier();
+
+    if (!generator || !this.matchesName(compiler, resource)) {
+      return result;
+    }
+
+    const [code] = result;
+    const { RawSource } = compiler.webpack.sources;
+    const input = Buffer.isBuffer(code) ? code : Buffer.from(code);
+    const cache = compilation.getCache("TerserWebpackPlugin|generate");
+    // The generator and its options are in the etag as well as the bytes: this
+    // cache outlives the build, so an entry stored under one set of options
+    // must not answer for another.
+    const cacheItem = cache.getItemCache(
+      resource,
+      cache.mergeEtags(
+        cache.getLazyHashedEtag(new RawSource(input)),
+        cache.getLazyHashedEtag(variesOn),
+      ),
+    );
+    let output =
+      /** @type {{ code: Buffer, filename?: string, errors?: (Error | string)[], warnings?: (Error | string)[] } | undefined} */
+      (await cacheItem.getPromise());
+
+    if (!output) {
+      /** @type {MinimizedResult} */
+      let minified;
+
+      try {
+        // Modules build before the worker pool is up, so this runs in process.
+        minified = await minify({
+          name: resource,
+          input,
+          // Images carry none, and a re-encoding would invalidate one anyway.
+          inputSourceMap: undefined,
+          minimizer: generator,
+          extractComments: false,
+          ecma: getEcmaVersion(
+            /** @type {NonNullable<NonNullable<import("webpack").Configuration["output"]>["environment"]>} */
+            (compiler.options.output.environment),
+          ),
+        });
+      } catch (error) {
+        compilation.errors.push(
+          TerserPlugin.buildError(
+            /** @type {Error | ErrorObject | string} */ (error),
+            resource,
+          ),
+        );
+
+        return result;
+      }
+
+      output = {
+        code:
+          typeof minified.code === "undefined"
+            ? input
+            : Buffer.isBuffer(minified.code)
+              ? minified.code
+              : Buffer.from(minified.code),
+        filename: minified.filename,
+        errors: (minified.errors || []).map((item) =>
+          TerserPlugin.buildError(
+            /** @type {Error | ErrorObject | string} */ (item),
+            resource,
+          ),
+        ),
+        warnings: (minified.warnings || []).map((item) =>
+          TerserPlugin.buildWarning(item, resource),
+        ),
+      };
+
+      await cacheItem.storePromise(output);
+    }
+
+    for (const error of /** @type {Error[]} */ (output.errors || [])) {
+      compilation.errors.push(error);
+    }
+
+    for (const warning of /** @type {Error[]} */ (output.warnings || [])) {
+      compilation.warnings.push(warning);
+    }
+
+    // Naming the asset after what it now is. `assetResource` is serialized with
+    // the module, so the rename survives a restore from the persistent cache,
+    // which `matchResource` would not.
+    if (output.filename && output.filename !== resource) {
+      /** @type {{ assetResource?: string }} */
+      (module.buildInfo).assetResource = output.filename;
+    }
+
+    return [output.code, result[1], result[2]];
+  }
+
+  /**
    * Validates the options the plugin was constructed with.
    * @private
    * @param {Compiler} compiler compiler
@@ -1353,6 +1499,44 @@ class TerserPlugin {
         });
       }
 
+      if (this.options.generator) {
+        const generatorData = getSerializeJavascript()({
+          generator: Array.isArray(this.options.generator.implementation)
+            ? this.options.generator.implementation.map(getVersion)
+            : getVersion(
+                /** @type {BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers} */
+                (this.options.generator.implementation),
+              ),
+          options: this.options.generator.options,
+        });
+        const variesOn = new compiler.webpack.sources.RawSource(generatorData);
+        const moduleHooks =
+          /** @type {AwaitableModuleHooks} */
+          (
+            /** @type {unknown} */
+            (compiler.webpack.NormalModule.getCompilationHooks(compilation))
+          );
+
+        try {
+          moduleHooks.processResult.tapPromise(pluginName, (result, module) =>
+            this.generate(compiler, compilation, variesOn, result, module),
+          );
+        } catch (error) {
+          // Before webpack 5.110 the hook is a `SyncWaterfallHook`, which
+          // rejects a promise tap. Nothing here can run without awaiting.
+          compilation.errors.push(
+            TerserPlugin.buildError(
+              new Error(
+                `The \`generate\` option needs a webpack whose \`NormalModule\` \`processResult\` hook can await (>= 5.111); this one cannot: ${
+                  /** @type {Error} */ (error).message
+                }`,
+              ),
+              pluginName,
+            ),
+          );
+        }
+      }
+
       compilation.hooks.processAssets.tapPromise(
         {
           name: pluginName,
@@ -1404,6 +1588,7 @@ TerserPlugin.imageminMinify = imageminMinify;
 TerserPlugin.imageminNormalizeConfig = imageminNormalizeConfig;
 TerserPlugin.napiRsImageMinify = napiRsImageMinify;
 TerserPlugin.sharpMinify = sharpMinify;
+TerserPlugin.sharpGenerate = sharpGenerate;
 TerserPlugin.svgoMinify = svgoMinify;
 
 module.exports = TerserPlugin;

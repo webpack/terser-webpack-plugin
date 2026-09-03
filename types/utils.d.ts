@@ -446,6 +446,53 @@ export namespace napiRsImageMinify {
  */
 export function packageVersion(name: string): string | undefined;
 /**
+ * Replace a name's extension, keeping any query and fragment: the request that
+ * asked for the conversion is still part of what the asset is named after.
+ * @param {string} name asset name
+ * @param {string} extension the new extension, without a dot
+ * @returns {string} the renamed asset
+ */
+export function replaceExtension(name: string, extension: string): string;
+/**
+ * Re-encode an image as another format with `sharp`, renaming it to match.
+ *
+ * The format is asked for by the asset's own name — `?as=webp` — or by the one
+ * key of `encodeOptions`, and the name wins where both say something. Naming
+ * neither is an error: there is no format to generate.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} minimized result
+ */
+export function sharpGenerate(
+  input: Input,
+  sourceMap?: RawSourceMap | undefined,
+  minimizerOptions?: CustomOptions | undefined,
+): Promise<MinimizedResult>;
+export namespace sharpGenerate {
+  /**
+   * @returns {string | undefined} the minimizer version
+   */
+  function getMinimizerVersion(): string | undefined;
+  /**
+   * @returns {boolean} true, images are binary
+   */
+  function supportsBinary(): boolean;
+  /**
+   * @returns {boolean} false, sharp stays in process
+   */
+  function supportsWorker(): boolean;
+  /**
+   * @returns {boolean} false
+   */
+  function supportsWorkerThreads(): boolean;
+  /**
+   * @param {string} name asset name
+   * @returns {boolean} true if sharp can read `name`
+   */
+  function filter(name: string): boolean;
+}
+/**
  * Minify an image using `sharp`, re-encoding it as its own format.
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map (ignored for images)
