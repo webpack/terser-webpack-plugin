@@ -1,5 +1,27 @@
 # Changelog
 
+## 5.9.0
+
+### Minor Changes
+
+- add built-in image minimizers `sharpMinify`, `svgoMinify` and `imageminMinify` from `image-minimizer-webpack-plugin`, and dispatch the worker pool per asset so a minimizer that cannot use it no longer takes it from the others (by [@alexander-akait](https://github.com/alexander-akait) in [#703](https://github.com/webpack/minimizer-webpack-plugin/pull/703))
+
+- add the `napiRsImageMinify` image minimizer, using `@napi-rs/image` codecs — oxipng for lossless `png`, mozjpeg for `jpeg`, and its own encoders for `avif` and `webp` (by [@alexander-akait](https://github.com/alexander-akait) in [#708](https://github.com/webpack/minimizer-webpack-plugin/pull/708))
+
+- read transforms off an asset's name in `napiRsImageMinify` and `svgoMinify` too — the same spellings sharp accepts where the two can do the same thing (`width`, `height`, `fit`, `filter`, `rotate`, `flip`, `flop`, `grayscale`, `invert`, `blur`, `quality`, `lossless`, `speed`), plus `precision`, `multipass`, `pretty` and `indent` for svgo; a transform hands its output back to oxipng or mozjpeg so recompression is not lost, and `rotate=auto` skips the decode when the EXIF asks for nothing (by [@alexander-akait](https://github.com/alexander-akait) in [#709](https://github.com/webpack/minimizer-webpack-plugin/pull/709))
+
+- read what to do off an asset's name in `sharpMinify`, so `import banner from "./banner.png?width=320&quality=80"` sizes and re-encodes that one image — `width`, `height`, `unit`, `fit`, `position`, `background`, `without-enlargement`, `rotate`, `flip`, `flop`, `grayscale`, `blur`, `sharpen`, `quality`, `lossless`, `effort` and `progressive`, with short forms, the query overriding `minimizerOptions`, and `flip`, `flop`, `grayscale`, `blur` and `sharpen` newly settable there too (by [@alexander-akait](https://github.com/alexander-akait) in [#709](https://github.com/webpack/minimizer-webpack-plugin/pull/709))
+
+### Patch Changes
+
+- keep every asset's extracted comments when several share a comments file they do not reach in a row, or when another plugin already emitted it; end the worker pool when an asset fails after the pool started; honour an explicit `minimizerOptions.module: false` over the value webpack inferred; and stop a composed source map attributing generated code the input map never covered, or dropping an empty `sourcesContent` entry (by [@alexander-akait](https://github.com/alexander-akait) in [#716](https://github.com/webpack/minimizer-webpack-plugin/pull/716))
+
+- read a minimizer package's version past an `exports` that hides its `package.json` — `sharpMinify`, `svgoMinify` and `imageminMinify` reported no version, so every build hashed the same `0.0.0` and upgrading one of those packages did not invalidate what it had already minified (by [@alexander-akait](https://github.com/alexander-akait) in [#709](https://github.com/webpack/minimizer-webpack-plugin/pull/709))
+
+- match `test`, `include` and `exclude` against the asset name without its query and fragment as well as with them, so a rule written as `/\.png$/` still accepts assets whose emitted name carries one — `output.assetModuleFilename` is `[hash][ext][query][fragment]` by default, so it usually does (by [@alexander-akait](https://github.com/alexander-akait) in [#709](https://github.com/webpack/minimizer-webpack-plugin/pull/709))
+
+- fix what the image minimizers read a format as: SVG and JPEG 2000 are now detected, so a plugin converting an image into SVG is caught rather than writing SVG out under a name claiming a raster format; a PNG is walked chunk by chunk, so a comment mentioning `acTL` no longer makes a still image animated and a colour profile containing `IDAT` no longer hides a real one; and `sharpMinify` no longer offers to minify `raw` assets, which it could only fail on (by [@alexander-akait](https://github.com/alexander-akait) in [#710](https://github.com/webpack/minimizer-webpack-plugin/pull/710))
+
 ## 5.8.0
 
 ### Minor Changes
