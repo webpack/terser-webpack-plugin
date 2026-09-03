@@ -1,0 +1,5 @@
+.svg { background : url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'>   <rect  id='svgPayload'  />   </svg>") ; }
+.css { background : url("data:text/css,.cssPayload  {  color : #00ff00  }") ; }
+.html { background : url("data:text/html,<p   id='htmlPayload'   >hi</p>") ; }
+.json { background : url("data:application/json,{ \"jsonPayload\" :  1 }") ; }
+.js { background : url("data:text/javascript,var  jsPayload  =  1 ;") ; }

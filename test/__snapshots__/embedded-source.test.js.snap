@@ -1,0 +1,13 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`embedded source every language a host offers matches snapshot: assets 1`] = `
+{
+  "every-language.css": ".svg{background:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'> <rect id='svgPayload' /> </svg>")}.css{background:url(data:text/css,.cssPayload{color:%230f0})}.html{background:url(data:text/html,<p\\ id=htmlPayload>hi)}.json{background:url('data:application/json,{"jsonPayload":1}')}.js{background:url(data:text/javascript,var\\ jsPayload=1;)}",
+  "every-language.html": "<!doctype html><html lang=en><head><title>x</title><style>.styleElement{color:#0f0}</style><script>var scriptElement=1;function f(){return scriptElement}</script><script type=application/json>{"jsonElement":1}</script></head><body>
+<p style=color:#00f>hi</p>
+<svg xmlns=http://www.w3.org/2000/svg> <rect id=svgSubtree /> </svg>
+<iframe srcdoc="<p id=srcdocElement>hi"></iframe>
+
+</body></html>",
+}
+`;

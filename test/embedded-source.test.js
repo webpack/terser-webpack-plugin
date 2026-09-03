@@ -645,4 +645,229 @@ describe("embedded source", () => {
       );
     });
   });
+
+  describe("every language a host offers", () => {
+    /** @type {{ language: string, code: string }[]} */
+    const reached = [];
+
+    /**
+     * Wraps a minimizer so a case can say that *this plugin* reached a body.
+     * The emitted bytes alone cannot: webpack minifies an inline `<style>` and
+     * a JSON `<script>` with its own minifiers either way, so for those two the
+     * output is the same whether or not anything here ran.
+     * @param {string} language the language it minifies
+     * @param {EXPECTED_ANY} implementation the minimizer to record around
+     * @returns {EXPECTED_ANY} the recording minimizer
+     */
+    function recording(language, implementation) {
+      /**
+       * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+       * @param {EXPECTED_ANY} sourceMap the source map, when there is one
+       * @param {EXPECTED_ANY} minimizerOptions minimizer options
+       * @param {EXPECTED_ANY} extractComments extract comments option
+       * @returns {EXPECTED_ANY} what the wrapped minimizer answered
+       */
+      const wrapped = (input, sourceMap, minimizerOptions, extractComments) => {
+        const [[, code]] = Object.entries(input);
+
+        reached.push({ language, code });
+
+        return implementation(
+          input,
+          sourceMap,
+          minimizerOptions,
+          extractComments,
+        );
+      };
+
+      wrapped.getTypes = () => [language];
+      wrapped.getMinimizerVersion = () => "1.0.0";
+      // Recording is what these are for, and a worker would do it in another
+      // process.
+      wrapped.supportsWorker = () => false;
+      wrapped.supportsWorkerThreads = () => false;
+      wrapped.filter = implementation.filter;
+
+      if (implementation.getEmbeddedTypes) {
+        wrapped.getEmbeddedTypes = implementation.getEmbeddedTypes;
+      }
+
+      return wrapped;
+    }
+
+    /**
+     * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+     * @returns {{ code: string }} the JSON, re-encoded without its whitespace
+     */
+    function jsonMinify(input) {
+      const [[, code]] = Object.entries(input);
+
+      return { code: JSON.stringify(JSON.parse(code)) };
+    }
+
+    jsonMinify.filter = (name) => /\.json(\?.*)?$/i.test(name);
+
+    // The document and the stylesheet name the same five languages between
+    // them, so one plugin carrying a minimizer for each covers both hosts.
+    const CASES = [
+      {
+        host: "every-language.html",
+        language: "css",
+        where: "a <style> element",
+        from: "  .styleElement { color : #00ff00 }  ",
+        to: "<style>.styleElement{color:#0f0}</style>",
+        gone: "#00ff00",
+      },
+      {
+        host: "every-language.html",
+        language: "css",
+        where: "a style attribute",
+        from: "  color : #0000ff ;  ",
+        to: "<p style=color:#00f>hi</p>",
+        gone: "#0000ff",
+      },
+      {
+        host: "every-language.html",
+        language: "javascript",
+        where: "a <script> element",
+        from: "  var  scriptElement  =  1 ;  function  f ( ) { return  scriptElement }  ",
+        to: "<script>var scriptElement=1;function f(){return scriptElement}</script>",
+        gone: "var  scriptElement",
+      },
+      {
+        host: "every-language.html",
+        language: "json",
+        where: "a JSON <script> element",
+        from: '  { "jsonElement" :  1 }  ',
+        to: '<script type=application/json>{"jsonElement":1}</script>',
+        gone: '{ "jsonElement"',
+      },
+      {
+        host: "every-language.html",
+        language: "svg",
+        where: "an <svg> subtree",
+        from: "<svg xmlns=http://www.w3.org/2000/svg>   <rect id=svgSubtree />   </svg>",
+        to: "<svg xmlns=http://www.w3.org/2000/svg> <rect id=svgSubtree /> </svg>",
+        gone: ">   <rect",
+      },
+      {
+        host: "every-language.html",
+        language: "html",
+        where: "an <iframe srcdoc>",
+        from: '<p   id="srcdocElement"   >hi</p>',
+        to: '<iframe srcdoc="<p id=srcdocElement>hi">',
+        gone: "<p   id",
+      },
+      {
+        host: "every-language.css",
+        language: "svg",
+        where: "a url() data: payload",
+        from: "<svg xmlns='http://www.w3.org/2000/svg'>   <rect  id='svgPayload'  />   </svg>",
+        to: "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'> <rect id='svgPayload' /> </svg>\")",
+        gone: "<rect  id='svgPayload'",
+      },
+      {
+        host: "every-language.css",
+        language: "css",
+        where: "a url() data: payload",
+        from: ".cssPayload  {  color : #00ff00  }",
+        to: "url(data:text/css,.cssPayload{color:%230f0})",
+        gone: ".cssPayload  {",
+      },
+      {
+        host: "every-language.css",
+        language: "html",
+        where: "a url() data: payload",
+        from: "<p   id='htmlPayload'   >hi</p>",
+        to: "url(data:text/html,<p\\ id=htmlPayload>hi)",
+        gone: "<p   id='htmlPayload'",
+      },
+      {
+        host: "every-language.css",
+        language: "json",
+        where: "a url() data: payload",
+        from: '{ "jsonPayload" :  1 }',
+        to: "url('data:application/json,{\"jsonPayload\":1}')",
+        gone: '{ \\"jsonPayload\\"',
+      },
+      {
+        host: "every-language.css",
+        language: "javascript",
+        where: "a url() data: payload",
+        from: "var  jsPayload  =  1 ;",
+        to: "url(data:text/javascript,var\\ jsPayload=1;)",
+        gone: "var  jsPayload",
+      },
+    ];
+
+    /** @type {{ [file: string]: string }} */
+    const assets = {};
+    /** @type {string[]} */
+    let errors;
+
+    beforeAll(async () => {
+      const compiler = getCompiler({
+        entry: fixture("entry-every-language.js"),
+        target: "node",
+        output: {
+          path: path.resolve(__dirname, "helpers/dist"),
+          filename: "[name].js",
+          assetModuleFilename: "[name][ext]",
+        },
+        module: {
+          rules: [{ test: /\.(?:html|css)$/, type: "asset/resource" }],
+        },
+      });
+
+      defaultPlugin({
+        test: /\.(?:[cm]?js|css|html|svg|json)(\?.*)?$/i,
+        minify: [
+          recording("javascript", MinimizerPlugin.terserMinify),
+          recording("css", cssMinify),
+          recording("html", htmlMinify),
+          recording("svg", svgMinify),
+          recording("json", jsonMinify),
+        ],
+        minimizerOptions: [{}, {}, {}, {}, {}],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      errors = getErrors(stats);
+
+      for (const host of ["every-language.html", "every-language.css"]) {
+        assets[host] = readAsset(host, compiler, stats);
+      }
+    });
+
+    it("builds both hosts without an error", () => {
+      expect(errors).toEqual([]);
+    });
+
+    for (const { host, language, where, from, to, gone } of CASES) {
+      it(`minifies the ${language} in ${where} of ${host}`, () => {
+        expect(reached).toContainEqual({ language, code: from });
+        expect(assets[host]).toContain(to);
+        expect(assets[host]).not.toContain(gone);
+      });
+    }
+
+    it("reaches nothing beyond the bodies these cases name", () => {
+      const unaccounted = reached.filter(
+        ({ code }) => !CASES.some((testCase) => testCase.from === code),
+      );
+
+      // The three assets themselves — the bundle, the stylesheet and the
+      // document — are all that is minified beyond what they nest.
+      expect(unaccounted.map(({ language }) => language).sort()).toEqual([
+        "css",
+        "html",
+        "javascript",
+      ]);
+    });
+
+    it("matches snapshot", () => {
+      expect(assets).toMatchSnapshot("assets");
+    });
+  });
 });
