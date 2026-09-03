@@ -10,6 +10,7 @@ import {
   getCompiler,
   getErrors,
   getWarnings,
+  readAsset,
   readsAssets,
 } from "./helpers";
 
@@ -618,7 +619,47 @@ describe("extractComments option", () => {
 
     const stats = await compile(compiler);
 
+    const licenses = readAsset("licenses.txt", compiler, stats);
+
+    // The file another plugin emitted is kept, and the first asset to reach it
+    // is merged in rather than dropped.
+    expect(licenses).toContain("// Existing Comment");
+    expect(licenses).toContain("/*! Legal Comment */");
+
     expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+    expect(getErrors(stats)).toMatchSnapshot("errors");
+    expect(getWarnings(stats)).toMatchSnapshot("warnings");
+  });
+
+  it("should keep the comments of every asset sharing a file, when they are not adjacent", async () => {
+    // Assets reach the comments file in name order, so `b` sits between the two
+    // that share `shared.txt`.
+    const sharedCompiler = getCompiler({
+      entry: {
+        a: path.resolve(__dirname, "./fixtures/comments-2.js"),
+        b: path.resolve(__dirname, "./fixtures/comments-3.js"),
+        c: path.resolve(__dirname, "./fixtures/comments-4.js"),
+      },
+    });
+
+    new MinimizerPlugin({
+      extractComments: {
+        filename: (fileData) =>
+          fileData.filename === "b.js" ? "b.txt" : "shared.txt",
+      },
+    }).apply(sharedCompiler);
+
+    const stats = await compile(sharedCompiler);
+
+    const shared = readAsset("shared.txt", sharedCompiler, stats);
+
+    expect(shared).toContain("Information.");
+    expect(shared).toContain("Duplicate comment in difference files.");
+    expect(readAsset("b.txt", sharedCompiler, stats)).toContain(
+      "Duplicate comment in same file.",
+    );
+
+    expect(readsAssets(sharedCompiler, stats)).toMatchSnapshot("assets");
     expect(getErrors(stats)).toMatchSnapshot("errors");
     expect(getWarnings(stats)).toMatchSnapshot("warnings");
   });

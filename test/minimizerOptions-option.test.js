@@ -7,8 +7,50 @@ import {
   getCompiler,
   getErrors,
   getWarnings,
+  readAsset,
   readsAssets,
 } from "./helpers";
+
+// An ES module output is not wrapped, so its top-level names are terser's to
+// mangle — which is what the `module` option decides.
+function getEsmCompiler() {
+  return getCompiler({
+    entry: path.resolve(__dirname, "./fixtures/entry.mjs"),
+    output: {
+      filename: "[name].mjs",
+      module: true,
+      library: { type: "module" },
+    },
+    experiments: { outputModule: true },
+  });
+}
+
+/**
+ * Builds the same ES module output through a minimizer that only reports the
+ * `module` option it was handed.
+ * @param {object=} minimizerOptions options given to the plugin
+ * @returns {Promise<boolean[]>} the value each asset's minimizer received
+ */
+async function recordModuleOption(minimizerOptions = {}) {
+  const received = [];
+  const compiler = getEsmCompiler();
+
+  new MinimizerPlugin({
+    minimizerOptions,
+    // In a worker the minimizer runs in another process, where it could not
+    // report back to this one.
+    parallel: false,
+    minify: (input, sourceMap, options) => {
+      received.push(options.module);
+
+      return { code: Object.values(input)[0] };
+    },
+  }).apply(compiler);
+
+  await compile(compiler);
+
+  return received;
+}
 
 describe("minimizerOptions option", () => {
   it("should accept `minimizerOptions` and apply them like `terserOptions`", async () => {
@@ -59,5 +101,42 @@ describe("minimizerOptions option", () => {
     const plugin = new MinimizerPlugin();
 
     expect(plugin.options.minimizer.options).toEqual({});
+  });
+
+  it("should hand the minimizer the `module` value webpack inferred", async () => {
+    expect(await recordModuleOption()).toEqual([true]);
+  });
+
+  it("should keep an explicit `module: false` over the value webpack inferred", async () => {
+    expect(await recordModuleOption({ module: false })).toEqual([false]);
+  });
+
+  it("should keep an explicit `module: false` when terser is the minimizer", async () => {
+    const compiler = getEsmCompiler();
+
+    new MinimizerPlugin({ minimizerOptions: { module: false } }).apply(
+      compiler,
+    );
+
+    const stats = await compile(compiler);
+    const code = readAsset("main.mjs", compiler, stats);
+
+    // `module` lets terser mangle top-level names, so an explicit `false` has
+    // to reach it: they survive instead.
+    expect(code).toContain("function test()");
+    expect(getErrors(stats)).toEqual([]);
+  });
+
+  it("should still mangle the top level when `module` is left to webpack", async () => {
+    const compiler = getEsmCompiler();
+
+    new MinimizerPlugin().apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(readAsset("main.mjs", compiler, stats)).not.toContain(
+      "function test()",
+    );
+    expect(getErrors(stats)).toEqual([]);
   });
 });

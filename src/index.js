@@ -967,10 +967,14 @@ class TerserPlugin {
               optimizeOptions.availableNumberOfCores,
             )
           : scheduledTasks.length;
-    await throttleAll(limit, scheduledTasks);
-
-    if (initializedWorker) {
-      await initializedWorker.end();
+    try {
+      await throttleAll(limit, scheduledTasks);
+    } finally {
+      // A task that rejects after the pool started must not leave its
+      // workers running — the process would never exit.
+      if (initializedWorker) {
+        await initializedWorker.end();
+      }
     }
 
     /** @typedef {{ source: import("webpack").sources.Source, commentsFilename: string, from: string }} ExtractedCommentsInfoWithFrom */
@@ -981,13 +985,29 @@ class TerserPlugin {
        * @returns {Promise<ExtractedCommentsInfoWithFrom>} extract comments with info
        */
       async (previousPromise, [from, value]) => {
-        const previous =
+        let previous =
           /** @type {ExtractedCommentsInfoWithFrom | undefined} * */ (
             await previousPromise
           );
         const { commentsFilename, extractedCommentsSource } = value;
 
-        if (previous && previous.commentsFilename === commentsFilename) {
+        // Assets are visited in name order, so two that share a comments file
+        // need not be adjacent; whatever already sits at the destination — an
+        // earlier contributor, or a file another plugin emitted — is what this
+        // one merges into.
+        if (!previous || previous.commentsFilename !== commentsFilename) {
+          const existingAsset = compilation.getAsset(commentsFilename);
+
+          previous = existingAsset
+            ? {
+                source: existingAsset.source,
+                commentsFilename,
+                from: commentsFilename,
+              }
+            : undefined;
+        }
+
+        if (previous) {
           const { from: previousFrom, source: prevSource } = previous;
           const mergedName = `${previousFrom}|${from}`;
           const name = `${commentsFilename}|${mergedName}`;
@@ -1017,16 +1037,6 @@ class TerserPlugin {
           compilation.updateAsset(commentsFilename, source);
 
           return { source, commentsFilename, from: mergedName };
-        }
-
-        const existingAsset = compilation.getAsset(commentsFilename);
-
-        if (existingAsset) {
-          return {
-            source: existingAsset.source,
-            commentsFilename,
-            from: commentsFilename,
-          };
         }
 
         compilation.emitAsset(commentsFilename, extractedCommentsSource, {

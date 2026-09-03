@@ -1362,4 +1362,42 @@ describe("minify option", () => {
     expect(getErrors(stats)).toMatchSnapshot("errors");
     expect(getWarnings(stats)).toMatchSnapshot("warnings");
   });
+
+  it("should pass an empty source content on to the next minimizer", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/entry.js"),
+      devtool: "source-map",
+    });
+
+    let received;
+
+    new MinimizerPlugin({
+      parallel: false,
+      minify: [
+        (file) => ({
+          code: Object.values(file)[0],
+          map: {
+            version: 3,
+            sources: ["inlined-empty.js"],
+            sourcesContent: [""],
+            names: [],
+            mappings: "AAAA",
+          },
+        }),
+        (file, sourceMap) => {
+          received = sourceMap;
+
+          return { code: Object.values(file)[0] };
+        },
+      ],
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    // An empty file has content — `""` — and that is a different answer from
+    // the absent one that sends a consumer off to fetch the file itself.
+    expect(received.sources).toEqual(["inlined-empty.js"]);
+    expect(received.sourcesContent).toEqual([""]);
+    expect(getErrors(stats)).toEqual([]);
+  });
 });

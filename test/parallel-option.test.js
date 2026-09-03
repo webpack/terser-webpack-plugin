@@ -282,4 +282,23 @@ describe("parallel option", () => {
     expect(getErrors(stats)).toMatchSnapshot("errors");
     expect(getWarnings(stats)).toMatchSnapshot("warnings");
   });
+
+  it("should end the worker pool when an asset fails after the worker ran", async () => {
+    new MinimizerPlugin({
+      parallel: true,
+      extractComments: {
+        condition: "all",
+        banner: () => {
+          throw new Error("banner failed");
+        },
+      },
+    }).apply(compiler);
+
+    await expect(compile(compiler)).rejects.toThrow("banner failed");
+
+    // Whatever the pool was started for has to be shut down again — this
+    // failure used to leave its workers running.
+    expect(Worker).toHaveBeenCalledTimes(1);
+    expect(workerEnd).toHaveBeenCalledTimes(1);
+  });
 });
