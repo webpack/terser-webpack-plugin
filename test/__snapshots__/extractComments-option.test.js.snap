@@ -1,5 +1,41 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
+exports[`extractComments option should keep the comments of every asset sharing a file, when they are not adjacent: assets 1`] = `
+{
+  "a.js": "/*! For license information please see shared.txt */
+(()=>{var t={12(t){t.exports=Math.random()}};const o={};(function r(n){const s=o[n];if(void 0!==s)return s.exports;const e=o[n]={exports:{}};return t[n](e,e.exports,r),e.exports})(12)})();",
+  "b.js": "/*! For license information please see b.txt */
+(()=>{var t={35(t){t.exports=Math.random()}};const o={};(function r(n){const s=o[n];if(void 0!==s)return s.exports;const e=o[n]={exports:{}};return t[n](e,e.exports,r),e.exports})(35)})();",
+  "b.txt": "/**
+ * Duplicate comment in difference files.
+ * @license MIT
+ */
+
+/**
+ * Duplicate comment in same file.
+ * @license MIT
+ */
+",
+  "c.js": "/*! For license information please see shared.txt */
+(()=>{var t={250(t){t.exports=Math.random()}};const o={};(function r(n){const s=o[n];if(void 0!==s)return s.exports;const e=o[n]={exports:{}};return t[n](e,e.exports,r),e.exports})(250)})();",
+  "shared.txt": "/**
+ * Information.
+ * @license MIT
+ */
+
+
+/**
+ * Duplicate comment in difference files.
+ * @license MIT
+ */
+",
+}
+`;
+
+exports[`extractComments option should keep the comments of every asset sharing a file, when they are not adjacent: errors 1`] = `[]`;
+
+exports[`extractComments option should keep the comments of every asset sharing a file, when they are not adjacent: warnings 1`] = `[]`;
+
 exports[`extractComments option should match snapshot and do not preserve and extract "all" comments when the option if a function: assets 1`] = `
 {
   "chunks/203.203.js": "/*! For license information please see 203.203.js.LICENSE.txt */
@@ -6066,13 +6102,16 @@ exports[`extractComments option should work with the existing licenses file: ass
 (()=>{var t={12(t){t.exports=Math.random()}};const o={};(function r(n){const s=o[n];if(void 0!==s)return s.exports;const e=o[n]={exports:{}};return t[n](e,e.exports,r),e.exports})(12)})();",
   "licenses.txt": "// Existing Comment
 
+/*! Legal Comment */
+
+/** @license Copyright 2112 Moon. **/
+
+
 /**
  * Duplicate comment in difference files.
  * @license MIT
  */
 
-
-/*! Legal Comment */
 
 /*! Legal Foo */
 
@@ -6089,7 +6128,6 @@ exports[`extractComments option should work with the existing licenses file: ass
  */
 
 // @lic
-
 
 /**
  * Duplicate comment in same file.

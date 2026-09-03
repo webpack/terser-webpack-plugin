@@ -144,7 +144,7 @@ function composeSourceMaps(currentMap, prevMap, name) {
 
   /**
    * @param {string | null | undefined} source source identifier
-   * @param {string | undefined} content source content (when available)
+   * @param {string | null | undefined} content source content (when available)
    * @returns {number} index assigned in the composed map
    */
   const getSourceIdx = (source, content) => {
@@ -231,10 +231,13 @@ function composeSourceMaps(currentMap, prevMap, name) {
           orig.line == null ||
           orig.column == null
         ) {
+          // The previous map has nothing here, so end the mapping that
+          // precedes it rather than letting it run on over this region.
+          newSegments.push([seg[0]]);
           continue;
         }
 
-        const content = sourceContentFor(previous, orig.source) || undefined;
+        const content = sourceContentFor(previous, orig.source);
         const newSrcIdx = getSourceIdx(orig.source, content);
         const finalName =
           typeof orig.name === "string" && orig.name ? orig.name : segName;
@@ -251,7 +254,7 @@ function composeSourceMaps(currentMap, prevMap, name) {
           newSegments.push([seg[0], newSrcIdx, orig.line - 1, orig.column]);
         }
       } else {
-        const content = sourceContentFor(current, sourceName) || undefined;
+        const content = sourceContentFor(current, sourceName);
         const newSrcIdx = getSourceIdx(sourceName, content);
 
         if (typeof segName === "string") {
@@ -479,7 +482,12 @@ async function minify(options) {
       /** @type {import("./index.js").MinimizerOptions<T>} */
       ({
         ...baseOptions,
-        module: baseOptions.module || module,
+        // An explicit `false` is a choice, not an absent value, so only an
+        // absent one falls back to what webpack inferred.
+        module:
+          typeof baseOptions.module === "undefined"
+            ? module
+            : baseOptions.module,
         ecma: baseOptions.ecma || ecma,
         // Only for a minimizer that says it reads the option: every other one is
         // handed its own options untouched, so nothing sees a key it does not know.

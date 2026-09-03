@@ -2,7 +2,7 @@ import crypto from "crypto";
 
 import path from "path";
 
-import { TraceMap } from "@jridgewell/trace-mapping";
+import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import del from "del";
 import { SourceMapDevToolPlugin, javascript, util } from "webpack";
 import RequestShortener from "webpack/lib/RequestShortener";
@@ -1486,6 +1486,29 @@ describe("MinimizerPlugin", () => {
     expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
     expect(getErrors(stats)).toMatchSnapshot("errors");
     expect(getWarnings(stats)).toMatchSnapshot("warnings");
+  });
+
+  it("should not attribute generated code the input map does not cover", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/entry.js"),
+      devtool: "source-map",
+    });
+
+    new MinimizerPlugin().apply(compiler);
+
+    const stats = await compile(compiler);
+
+    const [code] = readAsset("main.js", compiler, stats).split("\n");
+    const map = new TraceMap(
+      JSON.parse(readAsset("main.js.map", compiler, stats)),
+    );
+
+    // The bundle's own closing wrapper comes from no original file, so the
+    // mapping before it has to end rather than run on over it.
+    expect(
+      originalPositionFor(map, { line: 1, column: code.length - 1 }).source,
+    ).toBeNull();
+    expect(getErrors(stats)).toEqual([]);
   });
 
   it('should work with the "SourceMapDevToolPlugin" plugin (like "source-map")', async () => {
