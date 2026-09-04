@@ -3134,6 +3134,75 @@ async function imageminMinify(input, sourceMap, minimizerOptions) {
   return { code: minified };
 }
 
+/* istanbul ignore next */
+/**
+ * Re-encode an image with `imagemin`, renaming it when a plugin wrote another
+ * format.
+ *
+ * Which format is written is the plugins' to decide -- `imagemin-webp` writes
+ * webp -- so it is read back off the bytes rather than asked for by name, and
+ * an asset a plugin left in its own format is simply not renamed.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} generated result
+ */
+async function imageminGenerate(input, sourceMap, minimizerOptions) {
+  const [[name, code]] = Object.entries(input);
+  const normalized = await imageminNormalizeConfig(minimizerOptions);
+  const imagemin = (await getDynamicImport()("imagemin")).default;
+  const result = await imagemin.buffer(
+    toBuffer(code),
+    /** @type {EXPECTED_ANY} */ (normalized),
+  );
+  // imagemin@8 answers with a Buffer, imagemin@9 with a Uint8Array.
+  const generated = Buffer.isBuffer(result) ? result : Buffer.from(result);
+
+  const { canonicalExtension, fileTypeFromBuffer } = require("./fileType.js");
+
+  const inputExtension = canonicalExtension(extensionOf(name));
+  const detected = fileTypeFromBuffer(generated);
+  const outputExtension = detected && canonicalExtension(detected.ext);
+
+  if (outputExtension && inputExtension !== outputExtension) {
+    return {
+      code: generated,
+      filename: replaceExtension(name, outputExtension),
+    };
+  }
+
+  return { code: generated };
+}
+
+/**
+ * @returns {string | undefined} the minimizer version
+ */
+imageminGenerate.getMinimizerVersion = () => packageVersion("imagemin");
+
+/**
+ * The asset reaches this one as bytes rather than as text.
+ * @returns {boolean} true, images are binary
+ */
+imageminGenerate.supportsBinary = () => true;
+
+/**
+ * Its plugins shell out to native binaries of their own, and its input cannot
+ * cross the worker boundary as text, so it stays in process.
+ * @returns {boolean} false
+ */
+imageminGenerate.supportsWorker = () => false;
+
+/**
+ * @returns {boolean} false
+ */
+imageminGenerate.supportsWorkerThreads = () => false;
+
+/**
+ * @param {string} name asset name
+ * @returns {boolean} true if `name` looks like an image
+ */
+imageminGenerate.filter = (name) => IMAGE_FILE_RE.test(name);
+
 /**
  * @returns {string | undefined} the minimizer version
  */
@@ -3327,6 +3396,7 @@ module.exports = {
   getEcmaVersion,
   getMinimizerOptionsAt,
   htmlMinifierTerser,
+  imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
   jsonMinify,

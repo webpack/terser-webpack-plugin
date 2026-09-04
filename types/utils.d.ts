@@ -247,6 +247,49 @@ export namespace htmlMinifierTerser {
   function filter(name: string): boolean;
 }
 /**
+ * Re-encode an image with `imagemin`, renaming it when a plugin wrote another
+ * format.
+ *
+ * Which format is written is the plugins' to decide -- `imagemin-webp` writes
+ * webp -- so it is read back off the bytes rather than asked for by name, and
+ * an asset a plugin left in its own format is simply not renamed.
+ * @param {Input} input input
+ * @param {RawSourceMap=} sourceMap source map (ignored for images)
+ * @param {CustomOptions=} minimizerOptions options
+ * @returns {Promise<MinimizedResult>} generated result
+ */
+export function imageminGenerate(
+  input: Input,
+  sourceMap?: RawSourceMap | undefined,
+  minimizerOptions?: CustomOptions | undefined,
+): Promise<MinimizedResult>;
+export namespace imageminGenerate {
+  /**
+   * @returns {string | undefined} the minimizer version
+   */
+  function getMinimizerVersion(): string | undefined;
+  /**
+   * The asset reaches this one as bytes rather than as text.
+   * @returns {boolean} true, images are binary
+   */
+  function supportsBinary(): boolean;
+  /**
+   * Its plugins shell out to native binaries of their own, and its input cannot
+   * cross the worker boundary as text, so it stays in process.
+   * @returns {boolean} false
+   */
+  function supportsWorker(): boolean;
+  /**
+   * @returns {boolean} false
+   */
+  function supportsWorkerThreads(): boolean;
+  /**
+   * @param {string} name asset name
+   * @returns {boolean} true if `name` looks like an image
+   */
+  function filter(name: string): boolean;
+}
+/**
  * Minify an image using `imagemin` and the plugins named in the options.
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map (ignored for images)

@@ -1226,6 +1226,60 @@ describe("what an asset's name asks svgo for", () => {
   });
 });
 
+describe("imageminGenerate", () => {
+  // SVG markup under a name claiming a raster format: the same mismatch
+  // `imageminMinify` refuses, which is the one a generator exists to take.
+  const svg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect x="1.00000"/></svg>',
+  );
+
+  it("should rename an image a plugin turned into SVG", async () => {
+    const { code, filename, warnings } = await MinimizerPlugin.imageminGenerate(
+      { "photo.png": svg },
+      undefined,
+      { plugins: ["svgo"] },
+    );
+
+    expect(warnings).toBeUndefined();
+    expect(filename).toBe("photo.svg");
+    // svgo ran: the padded coordinate is what it trims.
+    expect(code.toString()).not.toContain("1.00000");
+    expect(code.toString()).toContain("<svg");
+  });
+
+  it("should keep the name when the format did not change", async () => {
+    const { code, filename } = await MinimizerPlugin.imageminGenerate(
+      { "photo.svg": svg },
+      undefined,
+      { plugins: ["svgo"] },
+    );
+
+    expect(filename).toBeUndefined();
+    expect(code.toString()).not.toContain("1.00000");
+  });
+
+  it("should keep the query and fragment the name carried", async () => {
+    const { filename } = await MinimizerPlugin.imageminGenerate(
+      { "photo.png?w=100#frag": svg },
+      undefined,
+      { plugins: ["svgo"] },
+    );
+
+    expect(filename).toBe("photo.svg?w=100#frag");
+  });
+
+  it("should declare what it needs from the plugin", () => {
+    expect(MinimizerPlugin.imageminGenerate.supportsBinary()).toBe(true);
+    // Its plugins shell out to native binaries, so it cannot leave the process.
+    expect(MinimizerPlugin.imageminGenerate.supportsWorker()).toBe(false);
+    expect(MinimizerPlugin.imageminGenerate.supportsWorkerThreads()).toBe(
+      false,
+    );
+    expect(MinimizerPlugin.imageminGenerate.filter("photo.png")).toBe(true);
+    expect(MinimizerPlugin.imageminGenerate.filter("main.js")).toBe(false);
+  });
+});
+
 describe("the image minimizers' versions", () => {
   // `sharp`, `svgo` and `imagemin` do not list `./package.json` in their
   // `exports`, so requiring it throws and the version used to read as
@@ -1235,6 +1289,8 @@ describe("the image minimizers' versions", () => {
     ["sharpMinify", MinimizerPlugin.sharpMinify],
     ["svgoMinify", MinimizerPlugin.svgoMinify],
     ["imageminMinify", MinimizerPlugin.imageminMinify],
+    ["imageminGenerate", MinimizerPlugin.imageminGenerate],
+    ["sharpGenerate", MinimizerPlugin.sharpGenerate],
     ["napiRsImageMinify", MinimizerPlugin.napiRsImageMinify],
   ])("should be what %s reports", (_name, minimizer) => {
     expect(minimizer.getMinimizerVersion()).toMatch(/^\d+\.\d+\.\d+/);

@@ -11,6 +11,7 @@ const {
   getEcmaVersion,
   getMinimizerOptionsAt,
   htmlMinifierTerser,
+  imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
   jsonMinify,
@@ -1594,6 +1595,7 @@ TerserPlugin.cleanCssMinify = cleanCssMinify;
 TerserPlugin.esbuildMinifyCss = esbuildMinifyCss;
 TerserPlugin.lightningCssMinify = lightningCssMinify;
 TerserPlugin.swcMinifyCss = swcMinifyCss;
+TerserPlugin.imageminGenerate = imageminGenerate;
 TerserPlugin.imageminMinify = imageminMinify;
 TerserPlugin.imageminNormalizeConfig = imageminNormalizeConfig;
 TerserPlugin.napiRsImageMinify = napiRsImageMinify;
