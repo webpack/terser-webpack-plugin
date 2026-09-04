@@ -3,7 +3,7 @@
 exports[`validation should validate a minimizer added through \`optimization.minimizer\` 1`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
  - options has an unknown property 'unknown'. These properties are valid:
-   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, minify?, generate?, generatorOptions? }"
+   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, minify?, generate?, generatorOptions?, severityError? }"
 `;
 
 exports[`validation validate 1`] = `
@@ -219,7 +219,7 @@ exports[`validation validate 16`] = `
 exports[`validation validate 17`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
  - options has an unknown property 'unknown'. These properties are valid:
-   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, minify?, generate?, generatorOptions? }"
+   object { test?, include?, exclude?, minimizerOptions?, terserOptions?, extractComments?, parallel?, minify?, generate?, generatorOptions?, severityError? }"
 `;
 
 exports[`validation validate 18`] = `
@@ -238,4 +238,20 @@ exports[`validation validate 19`] = `
       object { … }
     * options.minimizerOptions should be an array:
       [object { … }, ...] (should not have fewer than 1 item)"
+`;
+
+exports[`validation validate severityError 1`] = `
+"Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
+ - options.severityError should be one of these:
+   "off" | "warning" | "error"
+   -> Allows to choose how a minimizer's own errors are reported.
+   -> Read more at https://github.com/webpack/minimizer-webpack-plugin#severityerror"
+`;
+
+exports[`validation validate severityError 2`] = `
+"Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
+ - options.severityError should be one of these:
+   "off" | "warning" | "error"
+   -> Allows to choose how a minimizer's own errors are reported.
+   -> Read more at https://github.com/webpack/minimizer-webpack-plugin#severityerror"
 `;

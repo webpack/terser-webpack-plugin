@@ -193,6 +193,8 @@ const {
  * @typedef {undefined | boolean | number} Parallel
  */
 
+/** @typedef {"off" | "warning" | "error"} SeverityError */
+
 /**
  * @typedef {object} BasePluginOptions
  * @property {Rules=} test test rule
@@ -202,6 +204,7 @@ const {
  * @property {Parallel=} parallel parallel option
  * @property {MinimizerImplementation<EXPECTED_ANY>=} generate rewrites a module's own bytes as it is built, so a re-encoding can rename the asset
  * @property {MinimizerOptions<EXPECTED_ANY>=} generatorOptions options for `generate`
+ * @property {SeverityError=} severityError how a minimizer's own errors are reported
  */
 
 /**
@@ -255,6 +258,7 @@ class TerserPlugin {
       exclude,
       generate,
       generatorOptions,
+      severityError = "error",
     } = this.rawOptions;
 
     // `terserOptions` is a deprecated alias of `minimizerOptions`; prefer the
@@ -277,6 +281,7 @@ class TerserPlugin {
       parallel,
       include,
       exclude,
+      severityError,
       minimizer: {
         implementation: minify,
         options: resolvedMinimizerOptions,
@@ -747,7 +752,7 @@ class TerserPlugin {
             const hasSourceMap =
               inputSourceMap && TerserPlugin.isSourceMap(inputSourceMap);
 
-            compilation.errors.push(
+            this.report(compilation, [
               TerserPlugin.buildError(
                 /** @type {Error | ErrorObject | string} */
                 (error),
@@ -761,17 +766,17 @@ class TerserPlugin {
 
                 hasSourceMap ? compilation.requestShortener : undefined,
               ),
-            );
+            ]);
 
             return;
           }
 
           if (typeof output.code === "undefined") {
-            compilation.errors.push(
+            this.report(compilation, [
               new Error(
                 `${name} from Terser plugin\nMinimizer doesn't return result`,
               ),
-            );
+            ]);
           }
 
           if (output.warnings && output.warnings.length > 0) {
@@ -917,17 +922,7 @@ class TerserPlugin {
           });
         }
 
-        if (output.warnings && output.warnings.length > 0) {
-          for (const warning of output.warnings) {
-            compilation.warnings.push(warning);
-          }
-        }
-
-        if (output.errors && output.errors.length > 0) {
-          for (const error of output.errors) {
-            compilation.errors.push(error);
-          }
-        }
+        this.report(compilation, output.errors, output.warnings);
 
         // Emit extracted comments file even if the main asset was not
         // rewritten (some minimizers only produce comments / warnings / errors)
@@ -1129,6 +1124,35 @@ class TerserPlugin {
   }
 
   /**
+   * Routes what a minimizer reported into the compilation, as `severityError`
+   * asks: `"off"` files neither, `"warning"` files its errors as warnings.
+   * @private
+   * @param {Compilation} compilation compilation
+   * @param {(Error[])=} errors what the minimizer reported as errors
+   * @param {(Error[])=} warnings what it reported as warnings
+   * @returns {void}
+   */
+  report(compilation, errors, warnings) {
+    const { severityError } = this.options;
+
+    if (severityError === "off") {
+      return;
+    }
+
+    for (const warning of warnings || []) {
+      compilation.warnings.push(warning);
+    }
+
+    for (const error of errors || []) {
+      if (severityError === "warning") {
+        compilation.warnings.push(error);
+      } else {
+        compilation.errors.push(error);
+      }
+    }
+  }
+
+  /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
    * `asset/source` file's text, an `asset/inline` payload. No asset carries
@@ -1225,12 +1249,12 @@ class TerserPlugin {
           ),
         });
       } catch (error) {
-        compilation.errors.push(
+        this.report(compilation, [
           TerserPlugin.buildError(
             /** @type {Error | ErrorObject | string} */ (error),
             name,
           ),
-        );
+        ]);
 
         return source;
       }
@@ -1269,13 +1293,11 @@ class TerserPlugin {
       await cacheItem.storePromise(output);
     }
 
-    for (const error of /** @type {Error[]} */ (output.errors || [])) {
-      compilation.errors.push(error);
-    }
-
-    for (const warning of /** @type {Error[]} */ (output.warnings || [])) {
-      compilation.warnings.push(warning);
-    }
+    this.report(
+      compilation,
+      /** @type {Error[]} */ (output.errors),
+      /** @type {Error[]} */ (output.warnings),
+    );
 
     return output.source;
   }
@@ -1339,12 +1361,12 @@ class TerserPlugin {
           ),
         });
       } catch (error) {
-        compilation.errors.push(
+        this.report(compilation, [
           TerserPlugin.buildError(
             /** @type {Error | ErrorObject | string} */ (error),
             resource,
           ),
-        );
+        ]);
 
         return result;
       }
@@ -1371,13 +1393,11 @@ class TerserPlugin {
       await cacheItem.storePromise(output);
     }
 
-    for (const error of /** @type {Error[]} */ (output.errors || [])) {
-      compilation.errors.push(error);
-    }
-
-    for (const warning of /** @type {Error[]} */ (output.warnings || [])) {
-      compilation.warnings.push(warning);
-    }
+    this.report(
+      compilation,
+      /** @type {Error[]} */ (output.errors),
+      /** @type {Error[]} */ (output.warnings),
+    );
 
     // Naming the asset after what it now is. `assetResource` is serialized with
     // the module, so the rename survives a restore from the persistent cache,

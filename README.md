@@ -121,6 +121,7 @@ Using supported `devtool` values enable source map generation.
 - **[`minimizerOptions`](#minimizeroptions)**
 - **[`generate`](#generate)**
 - **[`generatorOptions`](#generatoroptions)**
+- **[`severityError`](#severityerror)**
 - **[`extractComments`](#extractcomments)**
 
 ### `test`
@@ -656,6 +657,42 @@ module.exports = {
       generatorOptions: { encodeOptions: { webp: { quality: 90 } } },
     }),
   ],
+};
+```
+
+### `severityError`
+
+Type:
+
+```ts
+type severityError = "off" | "warning" | "error";
+```
+
+Default: `"error"`
+
+How a **minimizer's own** diagnostics are filed: what it reported, and what it
+threw. `"warning"` files its errors among the warnings, so a build that cannot
+minify one asset still succeeds; `"off"` files neither its errors nor its
+warnings.
+
+This does not reach the plugin's own diagnostics — an invalid source map, or a
+[`generate`](#generate) asked of a webpack too old to await — which are
+reported whatever this says, since silencing them would hide the reason nothing
+ran.
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        // One asset this minimizer chokes on should not fail the build.
+        severityError: "warning",
+      }),
+    ],
+  },
 };
 ```
 

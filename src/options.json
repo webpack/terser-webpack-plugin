@@ -234,6 +234,11 @@
           }
         }
       ]
+    },
+    "severityError": {
+      "description": "Allows to choose how a minimizer's own errors are reported.",
+      "link": "https://github.com/webpack/minimizer-webpack-plugin#severityerror",
+      "enum": ["off", "warning", "error"]
     }
   }
 }

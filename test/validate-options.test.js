@@ -344,6 +344,28 @@ describe("validation", () => {
     }).not.toThrow();
   });
 
+  it("validate severityError", () => {
+    expect(() => {
+      createCompiler({ severityError: "off" });
+    }).not.toThrow();
+
+    expect(() => {
+      createCompiler({ severityError: "warning" });
+    }).not.toThrow();
+
+    expect(() => {
+      createCompiler({ severityError: "error" });
+    }).not.toThrow();
+
+    expect(() => {
+      createCompiler({ severityError: "nope" });
+    }).toThrowErrorMatchingSnapshot();
+
+    expect(() => {
+      createCompiler({ severityError: true });
+    }).toThrowErrorMatchingSnapshot();
+  });
+
   it("should validate a minimizer added through `optimization.minimizer`", () => {
     expect(() => {
       getCompiler({
