@@ -119,6 +119,8 @@ Using supported `devtool` values enable source map generation.
 - **[`parallel`](#parallel)**
 - **[`minify`](#minify)**
 - **[`minimizerOptions`](#minimizeroptions)**
+- **[`generate`](#generate)**
+- **[`generatorOptions`](#generatoroptions)**
 - **[`extractComments`](#extractcomments)**
 
 ### `test`
@@ -550,6 +552,110 @@ module.exports = {
       }),
     ],
   },
+};
+```
+
+### `generate`
+
+Type:
+
+```ts
+type generateFn = (
+  input: Record<string, string | Buffer>,
+  sourceMap: undefined,
+  generatorOptions: Record<string, any>,
+) => Promise<{
+  code: string | Buffer;
+  filename?: string;
+  errors?: (Error | string)[];
+  warnings?: (Error | string)[];
+}>;
+
+type generate = generateFn | generateFn[];
+```
+
+Default: `undefined`
+
+Rewrites a module's own bytes **as it is built**, rather than an asset after
+the build. That is the one point at which a re-encoding can also **rename** —
+return a `filename` and the asset is emitted under it, with every reference in
+the bundle following. [`minify`](#minify) cannot: an asset's name is decided
+during code generation, so renaming there would leave the bundle pointing at a
+URL nothing emits.
+
+[`test`](#test), [`include`](#include) and [`exclude`](#exclude) select which
+modules it sees, matched against the module's resource — query and all, so
+`?as=webp` is matchable. A generator runs **in the webpack process**, since
+modules build before the worker pool is up, and its answer is cached under the
+bytes plus the generator and its options.
+
+`sharpGenerate` is the bundled one. It takes the target format from the
+request's `?as=` or, failing that, from a
+[`generatorOptions.encodeOptions`](#generatoroptions) naming exactly one
+format, and reports an error when neither says which format to write:
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  module: {
+    rules: [
+      {
+        test: /\.(jpe?g|png)$/i,
+        type: "asset/resource",
+        // The query has to survive into the name, or two formats of one image
+        // collide.
+        generator: { filename: "[name][ext][query]" },
+      },
+    ],
+  },
+  plugins: [
+    new MinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      generate: MinimizerPlugin.sharpGenerate,
+    }),
+  ],
+};
+```
+
+```js
+// `image.jpg` is emitted as `image.webp`, and this import points at it.
+import webp from "./image.jpg?as=webp";
+```
+
+> **Note**
+>
+> `generate` needs a webpack whose `NormalModule` `processResult` hook can be
+> awaited (**5.111** or newer). On an older webpack the plugin reports an error
+> rather than silently generating nothing.
+
+### `generatorOptions`
+
+Type:
+
+```ts
+type generatorOptions = Record<string, any> | Record<string, any>[];
+```
+
+Default: `{}`
+
+Options for [`generate`](#generate), exactly as
+[`minimizerOptions`](#minimizeroptions) is for [`minify`](#minify): one object
+for one generator, or an array positionally matching an array of generators.
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  plugins: [
+    new MinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      generate: MinimizerPlugin.sharpGenerate,
+      // Names the format when the request does not, and carries the encoder's
+      // own settings either way.
+      generatorOptions: { encodeOptions: { webp: { quality: 90 } } },
+    }),
+  ],
 };
 ```
 
@@ -1587,12 +1693,11 @@ npm install --save-dev imagemin imagemin-mozjpeg imagemin-pngquant
 
 > **Note**
 >
-> These minimizers **only minify** — they never change an image's format or
+> On `minify` these **only minify** — they never change an image's format or
 > name. An asset's name is decided during code generation, long before a
 > minimizer runs, so a renamed asset would leave the bundle pointing at a URL
-> nothing emits. Converting `.png` to `.webp` stays with
-> [`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)
-> and its `generator` option.
+> nothing emits. Converting `.png` to `.webp` is what [`generate`](#generate)
+> is for: it runs while the module builds, early enough to rename.
 
 > **Note**
 >
@@ -1997,11 +2102,10 @@ could set that would mean the same thing twice over.
 
 > **Note**
 >
-> A query cannot pick a **format** here. `?as=webp` is read by
-> [`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)'s
-> loader, which sees the import before an asset exists and can emit a different
-> file for it. Resizing needs no new name, which is why it works here; changing
-> the format does, and this plugin runs after names are decided.
+> A query cannot pick a **format** on this path. Resizing needs no new name,
+> which is why it works here; changing the format does, and `minify` runs after
+> names are decided. Hand `?as=webp` to [`generate`](#generate) instead, which
+> sees the module as it builds and can emit the new format under a new name.
 
 #### Images beside everything else
 
