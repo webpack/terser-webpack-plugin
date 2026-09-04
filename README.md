@@ -1463,14 +1463,14 @@ inline agree about the target:
 ```js
 const environment = { browsers: ["chrome 100", "safari 15"] };
 
-minimizerOptions: [
+const minimizerOptions = [
   {},
   // cssMinify
   { environment, convertLengthUnits: true },
   // htmlMinify — `environment` reaches the CSS it nests; `css` carries the rest
   { environment, css: { convertLengthUnits: true } },
   {},
-],
+];
 ```
 
 > **Note**
