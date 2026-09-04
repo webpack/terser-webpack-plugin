@@ -1072,6 +1072,7 @@ Available HTML minimizers:
 - `MinimizerPlugin.swcMinifyHtml` — uses [`@swc/html`](https://github.com/swc-project/swc) for full HTML documents (with doctype and `<html>`/`<head>`/`<body>` tags).
 - `MinimizerPlugin.swcMinifyHtmlFragment` — uses [`@swc/html`](https://github.com/swc-project/swc) for HTML fragments (e.g. content inside `<template></template>` or partial HTML strings).
 - `MinimizerPlugin.minifyHtmlNode` — uses [`@minify-html/node`](https://github.com/wilsonzlin/minify-html).
+- `webpack/lib/html/htmlMinify` — webpack's own HTML minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The HTML minimizers are optional peer dependencies — install only the one
 you actually use:
@@ -1223,6 +1224,7 @@ Available CSS minimizers:
 - `MinimizerPlugin.esbuildMinifyCss` — uses [`esbuild`](https://github.com/evanw/esbuild) with the CSS loader.
 - `MinimizerPlugin.lightningCssMinify` — uses [`lightningcss`](https://github.com/parcel-bundler/lightningcss).
 - `MinimizerPlugin.swcMinifyCss` — uses [`@swc/css`](https://github.com/swc-project/swc).
+- `webpack/lib/css/cssMinify` — webpack's own CSS minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The CSS minimizers are optional peer dependencies — install only the ones
 you actually use:
@@ -1399,6 +1401,98 @@ module.exports = {
   },
 };
 ```
+
+### webpack's own minimizers
+
+webpack ships a CSS and an HTML minimizer of its own. They need no extra
+dependency — if you have webpack, you have them — and they are the two that
+can hand out what a document or a stylesheet nests inside itself, so pairing
+them with `terserMinify` and `jsonMinify` is what minifies embedded source
+(see [Embedded source](#embedded-source)).
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+const cssMinify = require("webpack/lib/css/cssMinify");
+const htmlMinify = require("webpack/lib/html/htmlMinify");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        test: /\.(?:[cm]?js|css|html|json)(\?.*)?$/i,
+        minify: [
+          MinimizerPlugin.terserMinify,
+          cssMinify,
+          htmlMinify,
+          MinimizerPlugin.jsonMinify,
+        ],
+        // Positional: one entry per `minify` entry, in the same order.
+        minimizerOptions: [{}, {}, {}, {}],
+      }),
+    ],
+  },
+};
+```
+
+Each one dispatches itself, so `test` only has to be wide enough to let the
+assets through: `cssMinify` claims `*.css` and `htmlMinify` claims `*.html`
+through their own `filter`, and both run in the worker pool.
+
+|                           | `cssMinify`                                | `htmlMinify`                               |
+| :------------------------ | :----------------------------------------- | :----------------------------------------- |
+| `getTypes()`              | `css`                                      | `html`                                     |
+| `getEmbeddedTypes()`      | `svg`, `css`, `html`, `json`, `javascript` | `css`, `javascript`, `json`, `svg`, `html` |
+| `filter`                  | `/\.css(\?.*)?$/i`                         | `/\.html(\?.*)?$/i`                        |
+| `supportsWorkerThreads()` | `true`                                     | `true`                                     |
+
+`minimizerOptions` is `optimization.minimize.css` and
+`optimization.minimize.html` respectively. `environment` carries what the
+target can read (`{ browsers, vendorPrefixes }`, the CSS entries of
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)),
+so a spelling the target could not parse is never reached for; the rest is
+`convertLengthUnits`, `rewriteCustomProperties`, `unusedSymbols`,
+`pseudoClasses` and the per-transform switches.
+
+`htmlMinify` runs the CSS minifier over every inline `<style>` and `style=""`,
+so it takes both: `environment` stays **top level**, shared by the document and
+the CSS inside it, while the CSS-only knobs go under `css`. Give the two
+minimizers the same `environment` and a `.css` asset and the same declaration
+inline agree about the target:
+
+```js
+const environment = { browsers: ["chrome 100", "safari 15"] };
+
+minimizerOptions: [
+  {},
+  // cssMinify
+  { environment, convertLengthUnits: true },
+  // htmlMinify — `environment` reaches the CSS it nests; `css` carries the rest
+  { environment, css: { convertLengthUnits: true } },
+  {},
+],
+```
+
+> **Note**
+>
+> Do not pass `renderEmbeddedSource` yourself. The plugin owns that option: it
+> wires the minimizers to each other with it, and a value you set is replaced.
+> What a minimizer offers and what another claims is what routes embedded
+> source — see [Embedded source](#embedded-source).
+
+Both minimizers re-resolve `webpack` when they run, in the worker pool as well
+as in the main process, so the `webpack` resolvable from this plugin has to be
+the one they came from, and at least **5.110.0** — the release that added the
+`webpack.css.syntax` and `webpack.html.syntax` entry points they read. A second
+or older copy of webpack in the tree surfaces as:
+
+```
+Cannot destructure property 'SourceProcessor' of 'webpack.css.syntax' as it is undefined.
+Cannot destructure property 'askEmbeddedRenderer' of 'webpack.html.syntax' as it is undefined.
+```
+
+Deduplicate webpack (`npm dedupe`, or a single version in a workspace root) and
+it goes away.
 
 ### Images
 
