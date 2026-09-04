@@ -1072,7 +1072,7 @@ Available HTML minimizers:
 - `MinimizerPlugin.swcMinifyHtml` — uses [`@swc/html`](https://github.com/swc-project/swc) for full HTML documents (with doctype and `<html>`/`<head>`/`<body>` tags).
 - `MinimizerPlugin.swcMinifyHtmlFragment` — uses [`@swc/html`](https://github.com/swc-project/swc) for HTML fragments (e.g. content inside `<template></template>` or partial HTML strings).
 - `MinimizerPlugin.minifyHtmlNode` — uses [`@minify-html/node`](https://github.com/wilsonzlin/minify-html).
-- `webpack/lib/html/htmlMinify` — webpack's own HTML minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
+- `webpack.html.syntax.htmlMinify` — webpack's own HTML minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The HTML minimizers are optional peer dependencies — install only the one
 you actually use:
@@ -1224,7 +1224,7 @@ Available CSS minimizers:
 - `MinimizerPlugin.esbuildMinifyCss` — uses [`esbuild`](https://github.com/evanw/esbuild) with the CSS loader.
 - `MinimizerPlugin.lightningCssMinify` — uses [`lightningcss`](https://github.com/parcel-bundler/lightningcss).
 - `MinimizerPlugin.swcMinifyCss` — uses [`@swc/css`](https://github.com/swc-project/swc).
-- `webpack/lib/css/cssMinify` — webpack's own CSS minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
+- `webpack.css.syntax.cssMinify` — webpack's own CSS minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The CSS minimizers are optional peer dependencies — install only the ones
 you actually use:
@@ -1408,12 +1408,14 @@ webpack ships a CSS and an HTML minimizer of its own. They need no extra
 dependency — if you have webpack, you have them — and they are the two that
 can hand out what a document or a stylesheet nests inside itself, so pairing
 them with `terserMinify` and `jsonMinify` is what minifies embedded source
-(see [Embedded source](#embedded-source)).
+(see [Embedded source](#embedded-source)). They are reached through webpack's
+public `css.syntax` and `html.syntax` exports, and need **webpack 5.111.0 or
+newer**.
 
 ```js
 const MinimizerPlugin = require("minimizer-webpack-plugin");
-const cssMinify = require("webpack/lib/css/cssMinify");
-const htmlMinify = require("webpack/lib/html/htmlMinify");
+const { cssMinify } = require("webpack").css.syntax;
+const { htmlMinify } = require("webpack").html.syntax;
 
 module.exports = {
   optimization: {
@@ -1482,9 +1484,10 @@ const minimizerOptions = [
 
 Both minimizers re-resolve `webpack` when they run, in the worker pool as well
 as in the main process, so the `webpack` resolvable from this plugin has to be
-the one they came from, and at least **5.110.0** — the release that added the
-`webpack.css.syntax` and `webpack.html.syntax` entry points they read. A second
-or older copy of webpack in the tree surfaces as:
+the one they came from, and at least **5.111.0** — the release that exports them
+on `webpack.css.syntax` and `webpack.html.syntax`. On an older webpack the
+destructure above yields `undefined`; a second or older copy in the tree
+surfaces from inside the minifier as:
 
 ```
 Cannot destructure property 'SourceProcessor' of 'webpack.css.syntax' as it is undefined.
