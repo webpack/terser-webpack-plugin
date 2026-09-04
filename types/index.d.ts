@@ -90,6 +90,16 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private embeddedMinimizer;
   /**
+   * Routes what a minimizer reported into the compilation, as `severityError`
+   * asks: `"off"` files neither, `"warning"` files its errors as warnings.
+   * @private
+   * @param {Compilation} compilation compilation
+   * @param {(Error[])=} errors what the minimizer reported as errors
+   * @param {(Error[])=} warnings what it reported as warnings
+   * @returns {void}
+   */
+  private report;
+  /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
    * `asset/source` file's text, an `asset/inline` payload. No asset carries
@@ -190,6 +200,7 @@ declare namespace TerserPlugin {
     InternalOptions,
     MinimizerWorker,
     Parallel,
+    SeverityError,
     BasePluginOptions,
     DefinedDefaultMinimizerAndOptions,
     InternalPluginOptions,
@@ -493,6 +504,7 @@ type MinimizerWorker<T> = JestWorker & {
   minify: (options: InternalOptions<T>) => Promise<MinimizedResult>;
 };
 type Parallel = undefined | boolean | number;
+type SeverityError = "off" | "warning" | "error";
 type BasePluginOptions = {
   /**
    * test rule
@@ -522,6 +534,10 @@ type BasePluginOptions = {
    * options for `generate`
    */
   generatorOptions?: MinimizerOptions<EXPECTED_ANY> | undefined;
+  /**
+   * how a minimizer's own errors are reported
+   */
+  severityError?: SeverityError | undefined;
 };
 type DefinedDefaultMinimizerAndOptions<T> =
   T extends import("terser").MinifyOptions
