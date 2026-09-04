@@ -146,6 +146,109 @@ describe("generate option", () => {
   });
 });
 
+describe("generatorOptions", () => {
+  /**
+   * Records the options it was handed and rewrites nothing, so a test can read
+   * back what reached it.
+   * @param {{ [file: string]: string | Buffer }} input input
+   * @param {undefined} sourceMap source map
+   * @param {Record<string, EXPECTED_ANY>} generatorOptions the options under test
+   * @returns {{ code: string | Buffer }} the input, unchanged
+   */
+  function records(input, sourceMap, generatorOptions) {
+    const [[, code]] = Object.entries(input);
+
+    records.seen.push(generatorOptions);
+
+    return { code };
+  }
+
+  records.supportsBinary = () => true;
+  records.supportsWorker = () => false;
+
+  beforeEach(() => {
+    records.seen = [];
+  });
+
+  /**
+   * @param {object} options plugin options beyond `test` and `generate`
+   * @param {EXPECTED_ANY} generate the generator, or an array of them
+   * @returns {Promise<import("webpack").Stats>} the stats of the build
+   */
+  async function build(options, generate) {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g$/i, generate, ...options }).apply(
+      compiler,
+    );
+
+    return compile(compiler);
+  }
+
+  it("should hand one object to the generator", async () => {
+    const stats = await build(
+      { generatorOptions: { encodeOptions: { webp: { quality: 90 } } } },
+      records,
+    );
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(records.seen).toHaveLength(1);
+    expect(records.seen[0]).toMatchObject({
+      encodeOptions: { webp: { quality: 90 } },
+    });
+  });
+
+  it("should default to an empty object", async () => {
+    const stats = await build({}, records);
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(records.seen).toHaveLength(1);
+    // `module` and `ecma` are overlaid onto a generator's options the same way
+    // they are onto a minimizer's, so an absent `generatorOptions` is not bare.
+    expect(Object.keys(records.seen[0]).sort()).toEqual(["ecma", "module"]);
+  });
+
+  it("should match an array of options to an array of generators", async () => {
+    const stats = await build(
+      { generatorOptions: [{ first: true }, { second: true }] },
+      [records, records],
+    );
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(records.seen).toHaveLength(2);
+    expect(records.seen[0]).toMatchObject({ first: true });
+    expect(records.seen[1]).toMatchObject({ second: true });
+    expect(records.seen[0]).not.toHaveProperty("second");
+  });
+
+  it("should share one object across an array of generators", async () => {
+    const stats = await build({ generatorOptions: { shared: true } }, [
+      records,
+      records,
+    ]);
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(records.seen).toHaveLength(2);
+    expect(records.seen[0]).toMatchObject({ shared: true });
+    expect(records.seen[1]).toMatchObject({ shared: true });
+  });
+});
+
 describe("sharpGenerate target format", () => {
   it("should report when no target format was asked for", async () => {
     const result = await MinimizerPlugin.sharpGenerate(

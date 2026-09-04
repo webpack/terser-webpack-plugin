@@ -519,6 +519,12 @@ can also be an array. Each element is passed to the minimizer at the same
 index in the `minify` array. If a single object is provided instead, it is
 reused for every minimizer.
 
+Two keys are filled in before a minimizer sees them, and only when the options
+do not already set them: `ecma`, from
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment),
+and `module`, from the asset's own `javascriptModule` info or its `.mjs` /
+`.cjs` extension. Setting either yourself wins, including `module: false`.
+
 > **Note**
 >
 > `terserOptions` is kept as a deprecated alias of `minimizerOptions` for
@@ -626,11 +632,16 @@ module.exports = {
 import webp from "./image.jpg?as=webp";
 ```
 
-Under [`cache.type: "filesystem"`](https://webpack.js.org/configuration/cache/#cachetype)
-a module is restored from the pack rather than rebuilt across runs. That
-restored result is the generator's, so changing `generate` or
-`generatorOptions` has to invalidate the pack, and the plugin adds their
-identity to
+In watch mode the rename is carried on the module rather than reapplied each
+build, so a rebuild that does not touch the image keeps pointing at the
+generated name without running the generator again. Changing the image does
+run it again, since its answer is cached under the bytes.
+
+The same holds across runs under
+[`cache.type: "filesystem"`](https://webpack.js.org/configuration/cache/#cachetype),
+where a module is restored from the pack rather than rebuilt. That restored
+result is the generator's, so changing `generate` or `generatorOptions` has to
+invalidate the pack, and the plugin adds their identity to
 [`cache.version`](https://webpack.js.org/configuration/cache/#cacheversion) so
 it does. This needs the plugin to be in the config — `plugins` or
 `optimization.minimizer` — since webpack builds the cache while it applies
@@ -656,7 +667,13 @@ Default: `{}`
 
 Options for [`generate`](#generate), exactly as
 [`minimizerOptions`](#minimizeroptions) is for [`minify`](#minify): one object
-for one generator, or an array positionally matching an array of generators.
+for one generator, or an array positionally matching an array of generators. A
+single object handed an array of generators is reused for every one of them.
+
+`ecma` is filled in from
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
+unless the options set it, the same way it is for
+[`minimizerOptions`](#minimizeroptions).
 
 ```js
 const MinimizerPlugin = require("minimizer-webpack-plugin");
