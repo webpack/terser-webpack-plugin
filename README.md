@@ -1072,6 +1072,7 @@ Available HTML minimizers:
 - `MinimizerPlugin.swcMinifyHtml` — uses [`@swc/html`](https://github.com/swc-project/swc) for full HTML documents (with doctype and `<html>`/`<head>`/`<body>` tags).
 - `MinimizerPlugin.swcMinifyHtmlFragment` — uses [`@swc/html`](https://github.com/swc-project/swc) for HTML fragments (e.g. content inside `<template></template>` or partial HTML strings).
 - `MinimizerPlugin.minifyHtmlNode` — uses [`@minify-html/node`](https://github.com/wilsonzlin/minify-html).
+- `webpack.html.syntax.htmlMinify` — webpack's own HTML minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The HTML minimizers are optional peer dependencies — install only the one
 you actually use:
@@ -1223,6 +1224,7 @@ Available CSS minimizers:
 - `MinimizerPlugin.esbuildMinifyCss` — uses [`esbuild`](https://github.com/evanw/esbuild) with the CSS loader.
 - `MinimizerPlugin.lightningCssMinify` — uses [`lightningcss`](https://github.com/parcel-bundler/lightningcss).
 - `MinimizerPlugin.swcMinifyCss` — uses [`@swc/css`](https://github.com/swc-project/swc).
+- `webpack.css.syntax.cssMinify` — webpack's own CSS minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The CSS minimizers are optional peer dependencies — install only the ones
 you actually use:
@@ -1399,6 +1401,167 @@ module.exports = {
   },
 };
 ```
+
+### webpack's own minimizers
+
+webpack ships a CSS and an HTML minimizer of its own. They need no extra
+dependency — if you have webpack, you have them — and they are the two that
+can hand out what a document or a stylesheet nests inside itself, so pairing
+them with `terserMinify` and `jsonMinify` is what minifies embedded source
+(see [Embedded source](#embedded-source)). They are reached through webpack's
+public `css.syntax` and `html.syntax` exports, and need **webpack 5.111.0 or
+newer**.
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+const { cssMinify } = require("webpack").css.syntax;
+const { htmlMinify } = require("webpack").html.syntax;
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        test: /\.(?:[cm]?js|css|html|json)(\?.*)?$/i,
+        minify: [
+          MinimizerPlugin.terserMinify,
+          cssMinify,
+          htmlMinify,
+          MinimizerPlugin.jsonMinify,
+        ],
+        // Positional: one entry per `minify` entry, in the same order.
+        minimizerOptions: [{}, {}, {}, {}],
+      }),
+    ],
+  },
+};
+```
+
+Each one dispatches itself, so `test` only has to be wide enough to let the
+assets through: `cssMinify` claims `*.css` and `htmlMinify` claims `*.html`
+through their own `filter`, and both run in the worker pool.
+
+|                           | `cssMinify`                                | `htmlMinify`                               |
+| :------------------------ | :----------------------------------------- | :----------------------------------------- |
+| `getTypes()`              | `css`                                      | `html`                                     |
+| `getEmbeddedTypes()`      | `svg`, `css`, `html`, `json`, `javascript` | `css`, `javascript`, `json`, `svg`, `html` |
+| `filter`                  | `/\.css(\?.*)?$/i`                         | `/\.html(\?.*)?$/i`                        |
+| `supportsWorkerThreads()` | `true`                                     | `true`                                     |
+
+`minimizerOptions` is `optimization.minimize.css` and
+`optimization.minimize.html` respectively. `environment` carries what the
+target can read (`{ browsers, vendorPrefixes }`, the CSS entries of
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)),
+so a spelling the target could not parse is never reached for.
+
+#### `cssMinify` options
+
+Every option is named directly on the object — the per-transform switches sit
+beside the rest, not nested.
+
+| Option                    | Type                                                | Default        | What it does                                                                                                                          |
+| :------------------------ | :-------------------------------------------------- | :------------- | :------------------------------------------------------------------------------------------------------------------------------------ |
+| `environment`             | `{ browsers?: string[], vendorPrefixes?: boolean }` | —              | What the target can read. `browsers` is a browserslist selection; `vendorPrefixes: false` leaves prefixes alone.                      |
+| `as`                      | `"stylesheet" \| "block-contents"`                  | `"stylesheet"` | Which production to read the source as. The plugin sets it — a `style=""` arrives as `"block-contents"`.                              |
+| `convertLengthUnits`      | `boolean`                                           | `false`        | Rewrite a length into a shorter unit it is exactly equal in (`16px` → `1pc`). Off because it earns nothing once compressed.           |
+| `rewriteCustomProperties` | `boolean`                                           | `false`        | Shorten a custom property's value like any other (`--x:#ffffff` → `--x:#fff`). Off because `getPropertyValue()` hands that text back. |
+| `unusedSymbols`           | `string[]`                                          | —              | Names a whole-project analysis found unused; a bare name is a class, id or `@keyframes`, a `--`-prefixed one a custom property.       |
+| `pseudoClasses`           | `{ [name: string]: string }`                        | —              | Write a pseudo-class as a class instead, so a script can apply it where the engine does not.                                          |
+| `renderEmbeddedSource`    | function                                            | —              | **Owned by the plugin** — do not pass it.                                                                                             |
+
+Per-transform switches, each on unless set to `false`:
+
+| Switch                 | What it rewrites                                                                                                         |
+| :--------------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| `colorFallbacks`       | Writes a color the target cannot read as an extra declaration before it, in a spelling it does read.                     |
+| `lowerUnsupported`     | Writes a spelling the target cannot read as one it can — the same value, said another way.                               |
+| `foldCase`             | Lowercases a name that matches ASCII case-insensitively (at-rule, property, pseudo, function, unit, keyword).            |
+| `rewriteEscapes`       | Writes an escaped identifier the shortest way that names it.                                                             |
+| `comments`             | Which comments survive: `"some"` (default), `true` / `"all"`, `false`, or a pattern / predicate over the comment's text. |
+| `resolveCustomAtRules` | Inlines what `@custom-media` / `@custom-selector` names, and drops the rule that named it.                               |
+| `mergeLonghands`       | Writes a family of longhands as the one shorthand that sets them.                                                        |
+| `mergeRules`           | Joins rules printing the same block, at-rules sharing a prelude, and a `@layer` block a later sibling reopens.           |
+| `normalizeQuotes`      | Normalizes quoting of strings, `url()`, font families and attribute values.                                              |
+| `reduceFunctions`      | Computes a call into the shorter call naming the same value (`calc()`, transforms, gradients, easings, filters).         |
+| `removeDeadRules`      | Drops a rule or declaration nothing can read — an empty rule, one an identical later one supersedes.                     |
+| `rewriteDirSelector`   | Writes a `:dir()` the target cannot read as the `[dir]` attribute selector.                                              |
+| `shortenColors`        | Writes each color in the shortest spelling of the same value.                                                            |
+| `shortenMediaQueries`  | Writes a media feature in its range spelling and collapses an `and` of two into the interval.                            |
+| `shortenNumbers`       | Writes each number in its shortest equal spelling.                                                                       |
+| `shortenSelectors`     | Rewrites a selector into a shorter equal one.                                                                            |
+| `shortenValues`        | Writes a value the shortest way its property's own grammar allows.                                                       |
+
+#### `htmlMinify` options
+
+| Option                      | Type                                            | Default   | What it does                                                                                                                                                     |
+| :-------------------------- | :---------------------------------------------- | :-------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `environment`               | same as `cssMinify`                             | —         | CSS's, not HTML's: handed to the CSS minifier this runs over inline CSS.                                                                                         |
+| `css`                       | object                                          | `{}`      | The CSS minifier's options for that inline CSS — see below.                                                                                                      |
+| `collapseWhitespace`        | `boolean \| "conservative" \| "smart" \| "all"` | `false`   | Collapses each run of whitespace in text, except where an ancestor renders it verbatim; `"smart"` also drops what sits against a block edge, `"all"` every edge. |
+| `removeEmptyAttributes`     | `boolean`                                       | `false`   | Drops an attribute whose empty value leaves it in the state its absence gives.                                                                                   |
+| `removeEmptyElements`       | `boolean`                                       | `false`   | Drops an element with no children and no attributes, unless its bare form is meaningful.                                                                         |
+| `mergeStyles`               | `boolean`                                       | `false`   | Prints a run of adjacent `<style>` elements as one sheet.                                                                                                        |
+| `sortAttributes`            | `boolean`                                       | `false`   | Prints attributes commonest name first, ties by name — nothing in HTML reads the order.                                                                          |
+| `sortTokenLists`            | `boolean`                                       | `false`   | Prints every token list the DOM reads as a set (`class`, `rel`, `part`, …) in token order.                                                                       |
+| `removeRedundantAttributes` | `boolean \| "smart" \| "all"`                   | `false`   | Drops an attribute whose value is the element's own default; `"all"` also drops spec defaults a selector can match.                                              |
+| `removeImpliedTags`         | `boolean \| "smart" \| "all"`                   | `"smart"` | How much of the `<html>` / `<head>` / `<body>` shell may be left out: `"smart"` only the `<html>` start tag, `true` / `"all"` all six.                           |
+| `minifyConditionalComments` | `boolean`                                       | `false`   | Minifies the markup inside a conditional comment's body.                                                                                                         |
+| `renderEmbeddedSource`      | function                                        | —         | **Owned by the plugin** — do not pass it.                                                                                                                        |
+
+Per-transform switches, each on unless set to `false`:
+
+| Switch                          | What it rewrites                                                                                                  |
+| :------------------------------ | :---------------------------------------------------------------------------------------------------------------- |
+| `collapseBooleanAttributes`     | Writes a boolean attribute spelled with its own name (`disabled="disabled"`) as the bare name.                    |
+| `comments`                      | Which comments survive — same values as CSS's. One a parser or server reads is kept regardless.                   |
+| `normalizeAttributeQuotes`      | Drops or re-picks an attribute value's quotes.                                                                    |
+| `normalizeEnumeratedAttributes` | Folds an enumerated value to the keyword it names.                                                                |
+| `normalizeListAttributes`       | Normalizes a space-, comma- or descriptor-separated list (`class`, `rel`, `srcset`, `sizes`, viewport `content`). |
+| `normalizeNumericAttributes`    | Writes an integer attribute the one way its rules read it.                                                        |
+| `removeOptionalTags`            | Leaves out an optional tag other than the shell, which is `removeImpliedTags`.                                    |
+
+The `css` object takes the CSS minifier's `convertLengthUnits`,
+`rewriteCustomProperties`, `unusedSymbols` and `pseudoClasses`, plus the CSS
+per-transform switches. `environment` is **not** among them: `htmlMinify` runs
+the CSS minifier over every inline `<style>` and `style=""`, so `environment`
+stays **top level**, shared by the document and the CSS inside it. Give the two
+minimizers the same `environment` and a `.css` asset and the same declaration
+inline agree about the target:
+
+```js
+const environment = { browsers: ["chrome 100", "safari 15"] };
+
+const minimizerOptions = [
+  {},
+  // cssMinify
+  { environment, convertLengthUnits: true },
+  // htmlMinify — `environment` reaches the CSS it nests; `css` carries the rest
+  { environment, css: { convertLengthUnits: true } },
+  {},
+];
+```
+
+> **Note**
+>
+> Do not pass `renderEmbeddedSource` yourself. The plugin owns that option: it
+> wires the minimizers to each other with it, and a value you set is replaced.
+> What a minimizer offers and what another claims is what routes embedded
+> source — see [Embedded source](#embedded-source).
+
+Both minimizers re-resolve `webpack` when they run, in the worker pool as well
+as in the main process, so the `webpack` resolvable from this plugin has to be
+the one they came from, and at least **5.111.0** — the release that exports them
+on `webpack.css.syntax` and `webpack.html.syntax`. On an older webpack the
+destructure above yields `undefined`; a second or older copy in the tree
+surfaces from inside the minifier as:
+
+```
+Cannot destructure property 'SourceProcessor' of 'webpack.css.syntax' as it is undefined.
+Cannot destructure property 'askEmbeddedRenderer' of 'webpack.html.syntax' as it is undefined.
+```
+
+Deduplicate webpack (`npm dedupe`, or a single version in a workspace root) and
+it goes away.
 
 ### Images
 
