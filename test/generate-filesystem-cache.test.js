@@ -279,4 +279,22 @@ describe("generate option with the filesystem cache", () => {
     expect(toWebp.calls).toBe(2);
     expect(second.assets).toContain("image.webp");
   });
+
+  it("should read an array of generators for the identity too", async () => {
+    const first = await run({ generate: [toWebp] });
+
+    if (reportedNoAwait(first.stats)) {
+      return;
+    }
+
+    expect(first.assets).toContain("image.webp");
+    expect(toWebp.calls).toBe(1);
+
+    const second = await run({ generate: [toAvif] });
+
+    expect(getErrors(second.stats)).toEqual([]);
+    expect(toAvif.calls).toBe(1);
+    expect(second.assets).toContain("image.avif");
+    expect(second.assets).not.toContain("image.webp");
+  });
 });
