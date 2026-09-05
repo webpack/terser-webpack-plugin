@@ -1,0 +1,41 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtml\` and allows to set \`@swc/html\` options: assets 1`] = `
+{
+  "__hash0__.html": "<!doctype html><html lang=en><meta charset=utf-8><title>Hello</title><body><!-- a comment -->
+    <h1>Hello,    World!</h1>
+    <p>     Hello there      ",
+  "main.js": "(()=>{var t={740(t,e,r){"use strict";t.exports=r.p+"__hash0__.html"}};const e={};function r(o){const n=e[o];if(void 0!==n)return n.exports;const c=e[o]={exports:{}};return t[o](c,c.exports,r),c.exports}r.m=t,r.g=function(){if("object"==typeof globalThis)return globalThis;try{return this||new Function("return this")()}catch(t){if("object"==typeof window)return window}}(),r.o=(t,e)=>Object.prototype.hasOwnProperty.call(t,e),(()=>{let t;r.g.importScripts&&(t=r.g.location+"");const e=r.g.document;if(!t&&e&&("SCRIPT"===e.currentScript?.tagName.toUpperCase()&&(t=e.currentScript.src),!t)){const r=e.getElementsByTagName("script");if(r.length){let e=r.length-1;for(;e>-1&&(!t||!/^http(s?):/.test(t));)t=r[e--].src}}if(!t)throw new Error("Automatic publicPath is not supported in this browser");t=t.replace(/^blob:/,"").replace(/#.*$/,"").replace(/\\?.*$/,"").replace(/\\/[^\\/]+$/,"/"),r.p=t})(),r.b="undefined"!=typeof document&&document.baseURI||self.location.href,console.log(new URL(r(740),r.b))})();",
+}
+`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtml\` and allows to set \`@swc/html\` options: errors 1`] = `[]`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtml\` and allows to set \`@swc/html\` options: warnings 1`] = `[]`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtml\`: assets 1`] = `
+{
+  "__hash0__.html": "<!doctype html><html lang=en><meta charset=utf-8><title>Hello</title><h1>Hello,    World!</h1>
+    <p>     Hello there      ",
+  "main.js": "(()=>{var t={740(t,e,r){"use strict";t.exports=r.p+"__hash0__.html"}};const e={};function r(o){const n=e[o];if(void 0!==n)return n.exports;const c=e[o]={exports:{}};return t[o](c,c.exports,r),c.exports}r.m=t,r.g=function(){if("object"==typeof globalThis)return globalThis;try{return this||new Function("return this")()}catch(t){if("object"==typeof window)return window}}(),r.o=(t,e)=>Object.prototype.hasOwnProperty.call(t,e),(()=>{let t;r.g.importScripts&&(t=r.g.location+"");const e=r.g.document;if(!t&&e&&("SCRIPT"===e.currentScript?.tagName.toUpperCase()&&(t=e.currentScript.src),!t)){const r=e.getElementsByTagName("script");if(r.length){let e=r.length-1;for(;e>-1&&(!t||!/^http(s?):/.test(t));)t=r[e--].src}}if(!t)throw new Error("Automatic publicPath is not supported in this browser");t=t.replace(/^blob:/,"").replace(/#.*$/,"").replace(/\\?.*$/,"").replace(/\\/[^\\/]+$/,"/"),r.p=t})(),r.b="undefined"!=typeof document&&document.baseURI||self.location.href,console.log(new URL(r(740),r.b))})();",
+}
+`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtml\`: errors 1`] = `[]`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtml\`: warnings 1`] = `[]`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtmlFragment\`: assets 1`] = `
+{
+  "__hash0__.html": "<div class=x>
+  
+  <p>     hello     </p>
+</div>
+",
+  "main.js": "(()=>{var t={806(t,e,r){"use strict";t.exports=r.p+"__hash0__.html"}};const e={};function r(o){const c=e[o];if(void 0!==c)return c.exports;const n=e[o]={exports:{}};return t[o](n,n.exports,r),n.exports}r.m=t,r.g=function(){if("object"==typeof globalThis)return globalThis;try{return this||new Function("return this")()}catch(t){if("object"==typeof window)return window}}(),r.o=(t,e)=>Object.prototype.hasOwnProperty.call(t,e),(()=>{let t;r.g.importScripts&&(t=r.g.location+"");const e=r.g.document;if(!t&&e&&("SCRIPT"===e.currentScript?.tagName.toUpperCase()&&(t=e.currentScript.src),!t)){const r=e.getElementsByTagName("script");if(r.length){let e=r.length-1;for(;e>-1&&(!t||!/^http(s?):/.test(t));)t=r[e--].src}}if(!t)throw new Error("Automatic publicPath is not supported in this browser");t=t.replace(/^blob:/,"").replace(/#.*$/,"").replace(/\\?.*$/,"").replace(/\\/[^\\/]+$/,"/"),r.p=t})(),r.b="undefined"!=typeof document&&document.baseURI||self.location.href,console.log(new URL(r(806),r.b))})();",
+}
+`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtmlFragment\`: errors 1`] = `[]`;
+
+exports[`swc html minify option should work using when the \`minify\` option is \`swcMinifyHtmlFragment\`: warnings 1`] = `[]`;
