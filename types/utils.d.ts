@@ -337,6 +337,14 @@ export function imageminNormalizeConfig(
   imageminConfig?: EXPECTED_OBJECT | undefined,
 ): Promise<EXPECTED_OBJECT>;
 /**
+ * Whether `generate` was written as a set of named presets rather than as one
+ * generator or a pipeline of them. A function is never a set; an array is a
+ * pipeline, which is why only a plain object counts.
+ * @param {EXPECTED_ANY} generate what `generate` was set to
+ * @returns {boolean} true when it names its generators
+ */
+export function isPresets(generate: EXPECTED_ANY): boolean;
+/**
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map
  * @param {CustomOptions=} minimizerOptions options
@@ -488,6 +496,12 @@ export namespace napiRsImageMinify {
  * @returns {string | undefined} its version, or undefined when it is not installed
  */
 export function packageVersion(name: string): string | undefined;
+/**
+ * The preset an asset's own name asks for, as `?as=webp`.
+ * @param {string} name asset name, query and all
+ * @returns {string | undefined} the preset asked for, or undefined
+ */
+export function readPreset(name: string): string | undefined;
 /**
  * Replace a name's extension, keeping any query and fragment: the request that
  * asked for the conversion is still part of what the asset is named after.

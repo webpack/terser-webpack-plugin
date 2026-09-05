@@ -2229,6 +2229,42 @@ function bySpelling(parameters) {
 const SHARP_QUERY_PARAMETER_BY_SPELLING = bySpelling(SHARP_QUERY_PARAMETERS);
 
 /**
+ * Whether `generate` was written as a set of named presets rather than as one
+ * generator or a pipeline of them. A function is never a set; an array is a
+ * pipeline, which is why only a plain object counts.
+ * @param {EXPECTED_ANY} generate what `generate` was set to
+ * @returns {boolean} true when it names its generators
+ */
+function isPresets(generate) {
+  return (
+    typeof generate === "object" &&
+    generate !== null &&
+    !Array.isArray(generate)
+  );
+}
+
+/**
+ * The preset an asset's own name asks for, as `?as=webp`.
+ * @param {string} name asset name, query and all
+ * @returns {string | undefined} the preset asked for, or undefined
+ */
+function readPreset(name) {
+  const queryIndex = name.indexOf("?");
+
+  if (queryIndex === -1) {
+    return undefined;
+  }
+
+  const query = name.slice(queryIndex + 1);
+  const fragmentIndex = query.indexOf("#");
+  const asked = new URLSearchParams(
+    fragmentIndex === -1 ? query : query.slice(0, fragmentIndex),
+  ).get("as");
+
+  return asked || undefined;
+}
+
+/**
  * What an asset's name asks a minimizer for, grouped by the argument bag each
  * value belongs in. `output.assetModuleFilename` carries the request's query
  * into the emitted name, so `import banner from "./banner.png?width=320"`
@@ -3399,12 +3435,14 @@ module.exports = {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  isPresets,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
   packageVersion,
+  readPreset,
   replaceExtension,
   sharpGenerate,
   sharpMinify,

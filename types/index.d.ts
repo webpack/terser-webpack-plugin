@@ -90,6 +90,18 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private embeddedMinimizer;
   /**
+   * The generator a module asks for by name, or the only one there is.
+   *
+   * A `generate` written as an object is a set of named presets, and `?as=`
+   * picks between them: a module that names none is left alone, and one that
+   * names a preset nothing defines is an error rather than a silent decline.
+   * @private
+   * @param {Compilation} compilation compilation
+   * @param {string} resource the module's resource, query and all
+   * @returns {{ implementation: MinimizerImplementation<EXPECTED_ANY>, options: MinimizerOptions<EXPECTED_ANY> } | undefined} the generator to run, or undefined to run none
+   */
+  private generatorFor;
+  /**
    * Carries the generator's identity into the persistent cache's version.
    * A generator rewrites a module's own build result, which the pack restores
    * without rebuilding, and nothing per-module keys on a plugin.

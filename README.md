@@ -577,7 +577,8 @@ type generateFn = (
   warnings?: (Error | string)[];
 }>;
 
-type generate = generateFn | generateFn[];
+type generate =
+  generateFn | generateFn[] | Record<string, generateFn | generateFn[]>;
 ```
 
 Default: `undefined`
@@ -632,6 +633,33 @@ module.exports = {
 import webp from "./image.jpg?as=webp";
 ```
 
+Written as an object, `generate` **names** its generators, and an asset picks
+one by name with `?as=`:
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: {
+    webp: MinimizerPlugin.sharpGenerate,
+    avif: MinimizerPlugin.sharpGenerate,
+  },
+  // Keyed by preset name, rather than positionally, when `generate` is.
+  generatorOptions: {
+    webp: { encodeOptions: { webp: { quality: 90 } } },
+    avif: { encodeOptions: { avif: { quality: 50 } } },
+  },
+});
+```
+
+```js
+// And `./image.jpg?as=avif` for the other one.
+import webp from "./image.jpg?as=webp";
+```
+
+A module naming no preset is left alone, so the same build can import an image
+unconverted. One naming a preset nothing defines is an error rather than a
+silent decline, since the name it asked for is what the bundle would point at.
+
 In watch mode the rename is carried on the module rather than reapplied each
 build, so a rebuild that does not touch the image keeps pointing at the
 generated name without running the generator again. Changing the image does
@@ -669,6 +697,7 @@ Options for [`generate`](#generate), exactly as
 [`minimizerOptions`](#minimizeroptions) is for [`minify`](#minify): one object
 for one generator, or an array positionally matching an array of generators. A
 single object handed an array of generators is reused for every one of them.
+Where `generate` names its generators, this is keyed by the same names.
 
 `ecma` is filled in from
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)

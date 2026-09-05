@@ -202,7 +202,7 @@
       ]
     },
     "generate": {
-      "description": "Rewrites a module's own bytes as it is built, which is what lets it be re-encoded into another format and renamed.",
+      "description": "Rewrites a module's own bytes as it is built, which is what lets it be re-encoded into another format and renamed. An object names its generators, and an asset asks for one of them by name with `?as=`.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#generate",
       "anyOf": [
         {
@@ -214,11 +214,29 @@
           "items": {
             "instanceof": "Function"
           }
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "instanceof": "Function"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "instanceof": "Function"
+                }
+              }
+            ]
+          }
         }
       ]
     },
     "generatorOptions": {
-      "description": "Options for the `generate` function.",
+      "description": "Options for the `generate` function. Keyed by preset name where `generate` names its generators.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#generatoroptions",
       "anyOf": [
         {

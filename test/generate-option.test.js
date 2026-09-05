@@ -476,6 +476,153 @@ describe("imageminGenerate", () => {
   });
 });
 
+describe("generate presets", () => {
+  /**
+   * @param {string} tag what it writes in front of the bytes
+   * @param {string} extension what the result is called
+   * @returns {EXPECTED_ANY} a generator that renames to `extension`
+   */
+  function encoderNamed(tag, extension) {
+    /**
+     * @param {{ [file: string]: string | Buffer }} input input
+     * @returns {{ code: Buffer, filename: string }} the re-encoded result
+     */
+    function encode(input) {
+      const [[name, code]] = Object.entries(input);
+
+      encode.calls += 1;
+
+      return {
+        code: Buffer.concat([Buffer.from(`${tag}:`), Buffer.from(code)]),
+        filename: replaceExtension(name, extension),
+      };
+    }
+
+    encode.supportsBinary = () => true;
+    encode.supportsWorker = () => false;
+    encode.calls = 0;
+
+    return encode;
+  }
+
+  /**
+   * @param {string} entry fixture that imports the image
+   * @param {object} options plugin options
+   * @returns {Promise<{ stats: import("webpack").Stats, assets: string[] }>} what the build produced
+   */
+  async function build(entry, options) {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, entry),
+      module: {
+        rules: [
+          {
+            test: /\.(png|jpe?g|svg|webp|avif)/i,
+            type: "asset/resource",
+            generator: { filename: "[name][ext][query][fragment]" },
+          },
+        ],
+      },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g/i, ...options }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    return { stats, assets: Object.keys(stats.compilation.assets) };
+  }
+
+  it("should run the preset the asset asks for by name", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const avif = encoderNamed("AVIF", "avif");
+    const { stats, assets } = await build("./fixtures/query-image.js", {
+      generate: { webp, avif },
+    });
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(getErrors(stats)).toEqual([]);
+    // `query-image.js` imports `./image.jpg?w=100#frag`, which names no preset.
+    expect(webp.calls).toBe(0);
+    expect(avif.calls).toBe(0);
+    expect(assets).toContain("image.jpg?w=100#frag");
+  });
+
+  it("should pick between presets and leave the others alone", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const avif = encoderNamed("AVIF", "avif");
+    const { stats, assets } = await build("./fixtures/preset-image.js", {
+      generate: { webp, avif },
+    });
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(webp.calls).toBe(1);
+    expect(avif.calls).toBe(0);
+    expect(assets).toContain("image.webp?as=webp");
+    expect(assets).not.toContain("image.jpg?as=webp");
+  });
+
+  it("should hand each preset its own options", async () => {
+    /**
+     * @param {{ [file: string]: string | Buffer }} input input
+     * @param {undefined} sourceMap source map
+     * @param {{ tag?: string }} generatorOptions the preset's options
+     * @returns {{ code: Buffer, filename: string }} the re-encoded result
+     */
+    function records(input, sourceMap, generatorOptions) {
+      const [[name, code]] = Object.entries(input);
+
+      records.seen.push(generatorOptions.tag);
+
+      return {
+        code: Buffer.from(code),
+        filename: replaceExtension(name, "webp"),
+      };
+    }
+
+    records.supportsBinary = () => true;
+    records.supportsWorker = () => false;
+    records.seen = [];
+
+    const { stats } = await build("./fixtures/preset-image.js", {
+      generate: { webp: records, avif: records },
+      generatorOptions: {
+        webp: { tag: "for-webp" },
+        avif: { tag: "for-avif" },
+      },
+    });
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(records.seen).toEqual(["for-webp"]);
+  });
+
+  it("should report a preset nothing defines", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { stats, assets } = await build("./fixtures/unknown-preset.js", {
+      generate: { webp },
+    });
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(getErrors(stats).join("\n")).toContain(
+      "no 'jxl' preset in `generate`, which defines 'webp'",
+    );
+    // Reported rather than guessed at: the asset is left as it was.
+    expect(assets).toContain("image.jpg?as=jxl");
+    expect(webp.calls).toBe(0);
+  });
+});
+
 describe("generate option in watch mode", () => {
   let context;
   let watcher;

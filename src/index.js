@@ -15,11 +15,13 @@ const {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  isPresets,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  readPreset,
   sharpGenerate,
   sharpMinify,
   svgoMinify,
@@ -1131,6 +1133,55 @@ class TerserPlugin {
   }
 
   /**
+   * The generator a module asks for by name, or the only one there is.
+   *
+   * A `generate` written as an object is a set of named presets, and `?as=`
+   * picks between them: a module that names none is left alone, and one that
+   * names a preset nothing defines is an error rather than a silent decline.
+   * @private
+   * @param {Compilation} compilation compilation
+   * @param {string} resource the module's resource, query and all
+   * @returns {{ implementation: MinimizerImplementation<EXPECTED_ANY>, options: MinimizerOptions<EXPECTED_ANY> } | undefined} the generator to run, or undefined to run none
+   */
+  generatorFor(compilation, resource) {
+    const { generator } =
+      /** @type {{ generator: { implementation: EXPECTED_ANY, options: EXPECTED_ANY } }} */
+      (this.options);
+
+    if (!isPresets(generator.implementation)) {
+      return generator;
+    }
+
+    const asked = readPreset(resource);
+
+    if (!asked) {
+      return undefined;
+    }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(generator.implementation, asked)
+    ) {
+      const names = Object.keys(generator.implementation);
+
+      compilation.errors.push(
+        TerserPlugin.buildError(
+          new Error(
+            `Error with '${resource}': no '${asked}' preset in \`generate\`, which defines ${names.map((name) => `'${name}'`).join(", ")}.`,
+          ),
+          resource,
+        ),
+      );
+
+      return undefined;
+    }
+
+    return {
+      implementation: generator.implementation[asked],
+      options: (generator.options || {})[asked] || {},
+    };
+  }
+
+  /**
    * Carries the generator's identity into the persistent cache's version.
    * A generator rewrites a module's own build result, which the pack restores
    * without rebuilding, and nothing per-module keys on a plugin.
@@ -1146,9 +1197,28 @@ class TerserPlugin {
       return;
     }
 
-    const implementations = Array.isArray(generator.implementation)
-      ? generator.implementation
-      : [generator.implementation];
+    // Every preset, its name included: which one a build reaches is the
+    // asset's to decide, so all of them are part of what the pack answers for.
+    const implementations = [];
+    const presets = isPresets(generator.implementation)
+      ? Object.keys(generator.implementation).sort()
+      : undefined;
+
+    for (const name of presets || [undefined]) {
+      if (typeof name !== "undefined") {
+        implementations.push(name);
+      }
+
+      const one =
+        typeof name === "undefined"
+          ? generator.implementation
+          : /** @type {{ [preset: string]: EXPECTED_ANY }} */
+            (generator.implementation)[name];
+
+      for (const one_ of Array.isArray(one) ? one : [one]) {
+        implementations.push(one_);
+      }
+    }
     // Source rather than `getMinimizerVersion`: a generator already travels as
     // source, and a custom one has no version to read.
     const identity = getSerializeJavascript()({
@@ -1330,10 +1400,15 @@ class TerserPlugin {
    * @returns {Promise<LoaderResult>} the result, rewritten or as it came
    */
   async generate(compiler, compilation, variesOn, result, module) {
-    const { generator } = this.options;
     const resource = module.resource || module.identifier();
 
-    if (!generator || !this.matchesName(compiler, resource)) {
+    if (!this.options.generator || !this.matchesName(compiler, resource)) {
+      return result;
+    }
+
+    const generator = this.generatorFor(compilation, resource);
+
+    if (!generator) {
       return result;
     }
 
