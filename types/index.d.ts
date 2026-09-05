@@ -90,6 +90,15 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private embeddedMinimizer;
   /**
+   * Carries the generator's identity into the persistent cache's version.
+   * A generator rewrites a module's own build result, which the pack restores
+   * without rebuilding, and nothing per-module keys on a plugin.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @returns {void}
+   */
+  private saltCacheVersion;
+  /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
    * `asset/source` file's text, an `asset/inline` payload. No asset carries

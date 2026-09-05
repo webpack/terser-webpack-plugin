@@ -626,6 +626,18 @@ module.exports = {
 import webp from "./image.jpg?as=webp";
 ```
 
+Under [`cache.type: "filesystem"`](https://webpack.js.org/configuration/cache/#cachetype)
+a module is restored from the pack rather than rebuilt across runs. That
+restored result is the generator's, so changing `generate` or
+`generatorOptions` has to invalidate the pack, and the plugin adds their
+identity to
+[`cache.version`](https://webpack.js.org/configuration/cache/#cacheversion) so
+it does. This needs the plugin to be in the config — `plugins` or
+`optimization.minimizer` — since webpack builds the cache while it applies
+them; a plugin applied by hand after `webpack()` returns is too late to reach
+it, and a changed generator would then be ignored until the cache directory is
+removed.
+
 > **Note**
 >
 > `generate` needs a webpack whose `NormalModule` `processResult` hook can be

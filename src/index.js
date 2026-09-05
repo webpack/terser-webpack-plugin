@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const os = require("os");
 const path = require("path");
 
@@ -1130,6 +1131,39 @@ class TerserPlugin {
   }
 
   /**
+   * Carries the generator's identity into the persistent cache's version.
+   * A generator rewrites a module's own build result, which the pack restores
+   * without rebuilding, and nothing per-module keys on a plugin.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @returns {void}
+   */
+  saltCacheVersion(compiler) {
+    const { generator } = this.options;
+    const { cache } = compiler.options;
+
+    if (!generator || !cache || cache.type !== "filesystem") {
+      return;
+    }
+
+    const implementations = Array.isArray(generator.implementation)
+      ? generator.implementation
+      : [generator.implementation];
+    // Source rather than `getMinimizerVersion`: a generator already travels as
+    // source, and a custom one has no version to read.
+    const identity = getSerializeJavascript()({
+      generator: implementations.map(String),
+      options: generator.options,
+    });
+
+    cache.version = `${cache.version || ""}|TerserPlugin-generate-${crypto
+      .createHash("sha256")
+      .update(identity)
+      .digest("hex")
+      .slice(0, 16)}`;
+  }
+
+  /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
    * `asset/source` file's text, an `asset/inline` payload. No asset carries
@@ -1425,6 +1459,8 @@ class TerserPlugin {
    */
   apply(compiler) {
     const pluginName = this.constructor.name;
+
+    this.saltCacheVersion(compiler);
 
     let validated = false;
     const validateOptions = () => {
