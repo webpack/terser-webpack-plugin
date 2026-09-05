@@ -849,6 +849,77 @@ describe("generate assets", () => {
     expect(assets).not.toContain("image.jpg");
   });
 
+  it("should report an asset generator that throws", async () => {
+    /**
+     * @returns {never} never returns
+     */
+    function boom() {
+      throw new Error("the encoder gave up");
+    }
+
+    boom.supportsBinary = () => true;
+    boom.supportsWorker = () => false;
+
+    const { stats, assets } = await build({
+      generate: { webp: { implementation: boom, type: "asset" } },
+    });
+
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(/the encoder gave up/);
+    expect(assets).not.toContain("image.webp");
+  });
+
+  it("should surface what an asset generator reports", async () => {
+    /**
+     * @param {{ [file: string]: string | Buffer }} input input
+     * @returns {EXPECTED_ANY} the result, with diagnostics
+     */
+    function noisy(input) {
+      const [[name, code]] = Object.entries(input);
+
+      return {
+        code: Buffer.from(code),
+        filename: replaceExtension(name, "webp"),
+        errors: ["could not read the colour profile"],
+        warnings: ["fell back to the default quality"],
+      };
+    }
+
+    noisy.supportsBinary = () => true;
+    noisy.supportsWorker = () => false;
+
+    const { stats, assets } = await build({
+      generate: { webp: { implementation: noisy, type: "asset" } },
+    });
+
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(/could not read the colour profile/);
+    expect(getWarnings(stats)).toHaveLength(1);
+    expect(getWarnings(stats)[0]).toMatch(/fell back to the default quality/);
+    expect(assets).toContain("image.webp");
+  });
+
+  it("should update an asset the generated name already names", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { compiler, stats, assets } = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          // Resolves to the name the asset already has.
+          filename: "[name][ext]",
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(assets.filter((name) => name === "image.jpg")).toHaveLength(1);
+    expect(assets).not.toContain("image.webp");
+    expect(readAsset("image.jpg", compiler, stats).toString()).toMatch(
+      /^WEBP:/,
+    );
+  });
+
   it("should skip an asset its `filter` declines", async () => {
     const webp = encoderNamed("WEBP", "webp");
     const { stats, assets } = await build({
@@ -1358,6 +1429,33 @@ describe("generate option with the filesystem cache", () => {
     expect(getErrors(second.stats)).toEqual([]);
     expect(toWebp.calls).toBe(2);
     expect(second.assets).toContain("image.webp");
+  });
+
+  it("should read every named generator for the identity", async () => {
+    // `asset` generators need no awaitable hook, so this runs everywhere and
+    // covers a salt built from more than one generator.
+    const options = {
+      generate: {
+        webp: { implementation: toWebp, type: "asset" },
+        avif: { implementation: toAvif, type: "asset" },
+      },
+    };
+    const first = await run(options);
+
+    expect(getErrors(first.stats)).toEqual([]);
+    expect(first.assets).toContain("image.webp");
+    expect(first.assets).toContain("image.avif");
+    expect(toWebp.calls).toBe(1);
+    expect(toAvif.calls).toBe(1);
+
+    toWebp.calls = 0;
+    toAvif.calls = 0;
+
+    const second = await run(options);
+
+    expect(getErrors(second.stats)).toEqual([]);
+    expect(second.assets).toContain("image.webp");
+    expect(second.assets).toContain("image.avif");
   });
 
   it("should read an array of generators for the identity too", async () => {
