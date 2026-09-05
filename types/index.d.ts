@@ -90,11 +90,27 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private embeddedMinimizer;
   /**
+   * One generator, however it was written: as the generator itself or as an
+   * object stating how to run it.
+   * @private
+   * @param {string | undefined} name the preset it is written under, where it has one
+   * @param {EXPECTED_ANY} entry what was written there
+   * @param {EXPECTED_ANY} declared what `generatorOptions` says for it
+   * @returns {{ name: string | undefined, implementation: EXPECTED_ANY, options: EXPECTED_ANY, type: string | undefined, filename: string | undefined, filter: ((name: string) => boolean) | undefined, deleteOriginalAssets: boolean | undefined }} the generator
+   */
+  private describeGenerator;
+  /**
+   * Every generator `generate` holds, whichever shape it was written in.
+   * @private
+   * @returns {ReturnType<TerserPlugin["describeGenerator"]>[]} them, in the order they were written
+   */
+  private generators;
+  /**
    * The generator a module asks for by name, or the only one there is.
    *
-   * A `generate` written as an object is a set of named presets, and `?as=`
-   * picks between them: a module that names none is left alone, and one that
-   * names a preset nothing defines is an error rather than a silent decline.
+   * A `generate` naming its generators is picked between by `?as=`: a module
+   * that names none is left alone, and one that names a generator nothing
+   * defines is an error rather than a silent decline.
    * @private
    * @param {Compilation} compilation compilation
    * @param {string} resource the module's resource, query and all
@@ -109,10 +125,10 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private hasModuleGenerator;
   /**
-   * The named generators that run over emitted assets rather than over a
-   * module as it builds.
+   * The generators that run over emitted assets rather than over a module as
+   * it builds.
    * @private
-   * @returns {{ name: string, implementation: EXPECTED_ANY, options: EXPECTED_ANY, filename?: string, filter?: (name: string) => boolean, deleteOriginalAssets?: boolean }[]} them, in the order they were written
+   * @returns {ReturnType<TerserPlugin["describeGenerator"]>[]} them, in the order they were written
    */
   private assetGenerators;
   /**
@@ -176,6 +192,13 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @returns {Promise<LoaderResult>} the result, rewritten or as it came
    */
   private generate;
+  /**
+   * Cross-field checks the schema cannot make: options given twice for one
+   * generator, and a `generatorOptions` key naming no generator.
+   * @private
+   * @returns {void}
+   */
+  private validateGenerators;
   /**
    * Validates the options the plugin was constructed with.
    * @private

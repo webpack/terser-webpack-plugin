@@ -834,6 +834,129 @@ describe("generate assets", () => {
   });
 });
 
+describe("generate options", () => {
+  /**
+   * @param {string} tag bytes it prefixes its output with
+   * @returns {EXPECTED_ANY} an encoder that records the options it was handed
+   */
+  function encoderNamed(tag) {
+    /**
+     * @param {{ [file: string]: string | Buffer }} input input
+     * @param {undefined} sourceMap source map
+     * @param {{ tag?: string }} generatorOptions the options it was handed
+     * @returns {{ code: Buffer, filename: string }} the re-encoded result
+     */
+    function encode(input, sourceMap, generatorOptions) {
+      const [[name, code]] = Object.entries(input);
+
+      encode.saw = generatorOptions;
+
+      return {
+        code: Buffer.concat([Buffer.from(`${tag}:`), Buffer.from(code)]),
+        filename: replaceExtension(name, "webp"),
+      };
+    }
+
+    encode.supportsBinary = () => true;
+    encode.supportsWorker = () => false;
+    encode.saw = undefined;
+
+    return encode;
+  }
+
+  /**
+   * @param {object} options plugin options
+   * @returns {Promise<import("webpack").Stats>} what the build produced
+   */
+  async function build(options) {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g$/i, ...options }).apply(compiler);
+
+    return compile(compiler);
+  }
+
+  it("should take a generator's options from `generate` itself", async () => {
+    const webp = encoderNamed("WEBP");
+    const stats = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          options: { tag: "from-generate" },
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(webp.saw.tag).toBe("from-generate");
+  });
+
+  it("should still take them from the deprecated `generatorOptions`", async () => {
+    const webp = encoderNamed("WEBP");
+    const stats = await build({
+      generate: { webp: { implementation: webp, type: "asset" } },
+      generatorOptions: { webp: { tag: "from-generator-options" } },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(webp.saw.tag).toBe("from-generator-options");
+  });
+
+  it("should take them from an unnamed generator's own `options`", async () => {
+    const webp = encoderNamed("WEBP");
+    const stats = await build({
+      generate: {
+        implementation: webp,
+        type: "asset",
+        options: { tag: "unnamed" },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(webp.saw.tag).toBe("unnamed");
+  });
+
+  /**
+   * Validation runs while webpack applies its plugins, so the plugin has to be
+   * in the config rather than applied to a compiler that already exists.
+   * @param {object} options plugin options
+   * @returns {import("webpack").Compiler} compiler
+   */
+  function construct(options) {
+    return getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+      plugins: [new MinimizerPlugin({ test: /\.jpe?g$/i, ...options })],
+    });
+  }
+
+  it("should reject options given in both places for one generator", () => {
+    const webp = encoderNamed("WEBP");
+
+    expect(() =>
+      construct({
+        generate: { webp: { implementation: webp, options: { tag: "a" } } },
+        generatorOptions: { webp: { tag: "b" } },
+      }),
+    ).toThrow(/'webp' generator in `generate` sets its own `options`/);
+  });
+
+  it("should reject a `generatorOptions` key naming no generator", () => {
+    const webp = encoderNamed("WEBP");
+
+    expect(() =>
+      construct({
+        generate: { webp: { implementation: webp, type: "asset" } },
+        generatorOptions: { webp2: { tag: "typo" } },
+      }),
+    ).toThrow(/`generatorOptions.webp2` names no generator/);
+  });
+});
+
 describe("generate option in watch mode", () => {
   let context;
   let watcher;

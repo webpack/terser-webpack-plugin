@@ -579,6 +579,7 @@ type generateFn = (
 
 interface generator {
   implementation: generateFn | generateFn[];
+  options?: Record<string, any>;
   type?: "import" | "asset";
   filename?: string;
   filter?: (name: string) => boolean;
@@ -588,6 +589,7 @@ interface generator {
 type generate =
   | generateFn
   | generateFn[]
+  | generator
   | Record<string, generateFn | generateFn[] | generator>;
 ```
 
@@ -670,8 +672,9 @@ A module naming no preset is left alone, so the same build can import an image
 unconverted. One naming a preset nothing defines is an error rather than a
 silent decline, since the name it asked for is what the bundle would point at.
 
-A named generator can also be written as an object, which is what lets it read
-what was **emitted** instead of a module as it builds:
+A generator can also be written as an object — on its own, or under a name —
+which is where its own options live and what lets it read what was **emitted**
+instead of a module as it builds:
 
 ```js
 new MinimizerPlugin({
@@ -679,6 +682,9 @@ new MinimizerPlugin({
   generate: {
     webp: {
       implementation: MinimizerPlugin.sharpGenerate,
+      // Where this generator's options belong. `generatorOptions` still works
+      // but is deprecated, and setting both for one generator is an error.
+      options: { encodeOptions: { webp: {} } },
       type: "asset",
       // Optional. Without it the generator's own name for the result is used,
       // which for `sharpGenerate` is the original with its extension replaced.
@@ -689,7 +695,6 @@ new MinimizerPlugin({
       deleteOriginalAssets: false,
     },
   },
-  generatorOptions: { webp: { encodeOptions: { webp: {} } } },
 });
 ```
 
@@ -744,6 +749,14 @@ type generatorOptions = Record<string, any> | Record<string, any>[];
 ```
 
 Default: `{}`
+
+> **Note**
+>
+> `generatorOptions` is deprecated in favour of a generator's own `options`,
+> which keeps one generator's configuration in one place — see
+> [`generate`](#generate). It keeps working; setting both for the same
+> generator is an error, and a key naming no generator is an error rather than
+> silently doing nothing.
 
 Options for [`generate`](#generate), exactly as
 [`minimizerOptions`](#minimizeroptions) is for [`minify`](#minify): one object

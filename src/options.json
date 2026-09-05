@@ -202,7 +202,7 @@
       ]
     },
     "generate": {
-      "description": "Rewrites a module's own bytes as it is built, which is what lets it be re-encoded into another format and renamed. An object names its generators, and an asset asks for one of them by name with `?as=`; a named generator written as an object can instead generate a new asset beside an emitted one.",
+      "description": "Rewrites a module's own bytes as it is built, which is what lets it be re-encoded into another format and renamed. Written as an object it states how to run one generator; written as an object of them it names its generators, and an asset asks for one by name with `?as=`.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#generate",
       "anyOf": [
         {
@@ -214,6 +214,50 @@
           "items": {
             "instanceof": "Function"
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "implementation": {
+              "description": "The generator itself.",
+              "anyOf": [
+                {
+                  "instanceof": "Function"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "instanceof": "Function"
+                  }
+                }
+              ]
+            },
+            "options": {
+              "description": "Options for this generator. Preferred over `generatorOptions`, which is deprecated; setting both for one generator is an error.",
+              "type": "object",
+              "additionalProperties": true
+            },
+            "type": {
+              "description": "`import` re-encodes a module as it is built, so the import that asked for it is renamed with it. `asset` generates a new asset beside an emitted one, which nothing has to import.",
+              "enum": ["import", "asset"]
+            },
+            "filename": {
+              "description": "Name for the generated asset, as a webpack filename template. `asset` generators only; by default the generator's own name for it is used.",
+              "type": "string",
+              "minLength": 1
+            },
+            "filter": {
+              "description": "Decides per asset whether to generate from it, on top of `test`/`include`/`exclude`.",
+              "instanceof": "Function"
+            },
+            "deleteOriginalAssets": {
+              "description": "Removes the asset generated from. `asset` generators only.",
+              "type": "boolean"
+            }
+          },
+          "required": ["implementation"]
         },
         {
           "type": "object",
@@ -249,6 +293,11 @@
                       }
                     ]
                   },
+                  "options": {
+                    "description": "Options for this generator. Preferred over `generatorOptions`, which is deprecated; setting both for one generator is an error.",
+                    "type": "object",
+                    "additionalProperties": true
+                  },
                   "type": {
                     "description": "`import` re-encodes a module as it is built, so the import that asked for it is renamed with it. `asset` generates a new asset beside an emitted one, which nothing has to import.",
                     "enum": ["import", "asset"]
@@ -275,7 +324,7 @@
       ]
     },
     "generatorOptions": {
-      "description": "Options for the `generate` function. Keyed by preset name where `generate` names its generators.",
+      "description": "Deprecated alias for the `options` of a `generate` generator. Options for the `generate` function, keyed by name where `generate` names its generators.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#generatoroptions",
       "anyOf": [
         {
