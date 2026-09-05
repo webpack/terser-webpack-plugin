@@ -48,7 +48,7 @@ Image minimizers:
 
 - [`sharp`](https://github.com/lovell/sharp) — `MinimizerPlugin.sharpMinify`. Re-encodes an image as the format its name already claims (`avif`, `gif`, `heif`, `jp2`, `jpeg`, `png`, `tiff`, `webp`), and can resize, rotate, flip, grayscale, blur or sharpen on the way — from the options or from the asset's own name. Requires `npm install --save-dev sharp`.
 - [`svgo`](https://github.com/svg/svgo) — `MinimizerPlugin.svgoMinify`. Minifies SVG, including an `asset/inline` SVG that no `test` can match. Requires `npm install --save-dev svgo`.
-- [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin.
+- [`imagemin`](https://github.com/imagemin/imagemin) — `MinimizerPlugin.imageminMinify`. Runs the `imagemin` plugins you name. Requires `npm install --save-dev imagemin` plus each plugin. Pair it with `MinimizerPlugin.imageminGenerate` under [`generate`](#generate) when a plugin converts the format, since only that can rename the asset.
 - [`@napi-rs/image`](https://github.com/Brooooooklyn/Image) — `MinimizerPlugin.napiRsImageMinify`. Rust codecs with no system dependency; recompresses `png` losslessly with oxipng and `jpeg` with mozjpeg, and can resize, turn, mirror, grayscale, invert or blur on the way — from the options or from the asset's own name. Requires `npm install --save-dev @napi-rs/image`.
 
 These only minify — they never change an image's format or name; see
@@ -589,10 +589,13 @@ modules it sees, matched against the module's resource — query and all, so
 modules build before the worker pool is up, and its answer is cached under the
 bytes plus the generator and its options.
 
-`sharpGenerate` is the bundled one. It takes the target format from the
-request's `?as=` or, failing that, from a
-[`generatorOptions.encodeOptions`](#generatoroptions) naming exactly one
-format, and reports an error when neither says which format to write:
+Two generators ship with the plugin, and they differ in who picks the format.
+`sharpGenerate` is told: it takes the target from the request's `?as=` or,
+failing that, from a [`generatorOptions.encodeOptions`](#generatoroptions)
+naming exactly one format, and reports an error when neither says which format
+to write. `imageminGenerate` is not: its plugins decide, so it reads the format
+back off the bytes they produced and renames to match, leaving an asset its
+plugins did not convert under the name it had.
 
 ```js
 const MinimizerPlugin = require("minimizer-webpack-plugin");
@@ -1679,6 +1682,11 @@ Available image minimizers:
 - `MinimizerPlugin.sharpMinify` — uses [`sharp`](https://github.com/lovell/sharp), re-encoding each image as its own format.
 - `MinimizerPlugin.svgoMinify` — uses [`svgo`](https://github.com/svg/svgo).
 - `MinimizerPlugin.imageminMinify` — uses [`imagemin`](https://github.com/imagemin/imagemin) and the plugins you name.
+- `MinimizerPlugin.napiRsImageMinify` — uses [`@napi-rs/image`](https://github.com/Brooooooklyn/Image), which ships prebuilt codecs.
+
+Converting an image to another format is [`generate`](#generate)'s job rather
+than a minimizer's, since only that can rename the asset:
+`MinimizerPlugin.sharpGenerate` and `MinimizerPlugin.imageminGenerate`.
 
 The image minimizers are optional peer dependencies — install only the ones
 you actually use:
@@ -1917,7 +1925,10 @@ module.exports = {
 >
 > A plugin that converts — `imagemin-webp`, `imagemin-avif` — writes a format
 > the asset's name does not claim. `imageminMinify` keeps the original and
-> warns instead of writing it, since it cannot rename the asset.
+> warns instead of writing it, since it cannot rename the asset. Reach for
+> [`generate`](#generate) with `MinimizerPlugin.imageminGenerate` to convert:
+> it runs the same plugins while the module builds, which is where the asset
+> can still take the name of the format they wrote.
 
 #### `@napi-rs/image`
 

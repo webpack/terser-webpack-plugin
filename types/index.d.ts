@@ -149,6 +149,7 @@ declare namespace TerserPlugin {
     esbuildMinifyCss,
     lightningCssMinify,
     swcMinifyCss,
+    imageminGenerate,
     imageminMinify,
     imageminNormalizeConfig,
     napiRsImageMinify,
@@ -210,6 +211,7 @@ import { cleanCssMinify } from "./utils";
 import { esbuildMinifyCss } from "./utils";
 import { lightningCssMinify } from "./utils";
 import { swcMinifyCss } from "./utils";
+import { imageminGenerate } from "./utils";
 import { imageminMinify } from "./utils";
 import { imageminNormalizeConfig } from "./utils";
 import { napiRsImageMinify } from "./utils";
