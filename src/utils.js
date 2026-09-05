@@ -2260,18 +2260,55 @@ function interpolateSize(filename, size) {
 }
 
 /**
- * Whether one named generator was written as an object stating how to run it,
- * rather than as the generator itself.
- * @param {EXPECTED_ANY} entry one entry of a `generate` preset object
- * @returns {boolean} true when it describes a generator
+ * Whether a minimizer or generator was written as an object stating how to run
+ * it, rather than as the function itself.
+ * @param {EXPECTED_ANY} entry what `minify` or `generate` holds
+ * @returns {boolean} true when it describes one
  */
-function isGeneratorDescriptor(entry) {
+function isDescriptor(entry) {
   return (
     typeof entry === "object" &&
     entry !== null &&
     !Array.isArray(entry) &&
     typeof entry.implementation !== "undefined"
   );
+}
+
+/**
+ * Flattens the objects `minify` may hold into the implementation-and-options
+ * pair the rest of the plugin reads, so a descriptor's own `options` and the
+ * deprecated `minimizerOptions` end up in one place, aligned by position.
+ * @param {EXPECTED_ANY} minify what `minify` was set to
+ * @param {EXPECTED_ANY} declared what `minimizerOptions` says
+ * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
+ */
+function normalizeMinimizers(minify, declared) {
+  if (Array.isArray(minify)) {
+    if (!minify.some(isDescriptor)) {
+      return { implementation: minify, options: declared };
+    }
+
+    return {
+      implementation: minify.map((one) =>
+        isDescriptor(one) ? one.implementation : one,
+      ),
+      options: minify.map((one, index) =>
+        isDescriptor(one) && typeof one.options !== "undefined"
+          ? one.options
+          : getMinimizerOptionsAt(declared, index),
+      ),
+    };
+  }
+
+  if (isDescriptor(minify)) {
+    return {
+      implementation: minify.implementation,
+      options:
+        typeof minify.options === "undefined" ? declared : minify.options,
+    };
+  }
+
+  return { implementation: minify, options: declared };
 }
 
 /**
@@ -3474,13 +3511,14 @@ module.exports = {
   imageminMinify,
   imageminNormalizeConfig,
   interpolateSize,
-  isGeneratorDescriptor,
+  isDescriptor,
   isPresets,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  normalizeMinimizers,
   packageVersion,
   readPreset,
   replaceExtension,

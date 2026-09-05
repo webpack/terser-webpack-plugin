@@ -65,7 +65,7 @@
       ]
     },
     "minimizerOptions": {
-      "description": "Options for `terser` (by default) or custom `minify` function.",
+      "description": "Deprecated way of giving a `minify` minimizer its options, to be removed in the next major release. Prefer a minimizer's own `options`.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#minimizeroptions",
       "anyOf": [
         {
@@ -186,7 +186,7 @@
       ]
     },
     "minify": {
-      "description": "Allows you to override default minify function.",
+      "description": "Allows you to override default minify function. Written as an object it states how to run one minimizer, options included.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#number",
       "anyOf": [
         {
@@ -196,8 +196,55 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "instanceof": "Function"
+            "anyOf": [
+              {
+                "instanceof": "Function"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "implementation": {
+                    "description": "The minimizer itself.",
+                    "instanceof": "Function"
+                  },
+                  "options": {
+                    "description": "Options for this minimizer. Preferred over `minimizerOptions`, which is deprecated; setting both for one minimizer is an error.",
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["implementation"]
+              }
+            ]
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "implementation": {
+              "description": "The minimizer itself.",
+              "anyOf": [
+                {
+                  "instanceof": "Function"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "instanceof": "Function"
+                  }
+                }
+              ]
+            },
+            "options": {
+              "description": "Options for this minimizer. Preferred over `minimizerOptions`, which is deprecated; setting both for one minimizer is an error.",
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": ["implementation"]
         }
       ]
     },

@@ -352,12 +352,12 @@ export function interpolateSize(
   },
 ): string;
 /**
- * Whether one named generator was written as an object stating how to run it,
- * rather than as the generator itself.
- * @param {EXPECTED_ANY} entry one entry of a `generate` preset object
- * @returns {boolean} true when it describes a generator
+ * Whether a minimizer or generator was written as an object stating how to run
+ * it, rather than as the function itself.
+ * @param {EXPECTED_ANY} entry what `minify` or `generate` holds
+ * @returns {boolean} true when it describes one
  */
-export function isGeneratorDescriptor(entry: EXPECTED_ANY): boolean;
+export function isDescriptor(entry: EXPECTED_ANY): boolean;
 /**
  * Whether `generate` was written as a set of named presets rather than as one
  * generator or a pipeline of them. A function is never a set; an array is a
@@ -508,6 +508,21 @@ export namespace napiRsImageMinify {
    */
   function filter(name: string): boolean;
 }
+/**
+ * Flattens the objects `minify` may hold into the implementation-and-options
+ * pair the rest of the plugin reads, so a descriptor's own `options` and the
+ * deprecated `minimizerOptions` end up in one place, aligned by position.
+ * @param {EXPECTED_ANY} minify what `minify` was set to
+ * @param {EXPECTED_ANY} declared what `minimizerOptions` says
+ * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
+ */
+export function normalizeMinimizers(
+  minify: EXPECTED_ANY,
+  declared: EXPECTED_ANY,
+): {
+  implementation: EXPECTED_ANY;
+  options: EXPECTED_ANY;
+};
 /**
  * The version a package reports. Read by walking up from its resolved entry
  * point rather than by requiring `<name>/package.json`, which a package whose

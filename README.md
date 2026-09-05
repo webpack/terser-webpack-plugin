@@ -320,7 +320,12 @@ type minifyFn = (
   extractedComments?: string[] | undefined;
 }>;
 
-type minify = minifyFn | minifyFn[];
+interface minimizer {
+  implementation: minifyFn | minifyFn[];
+  options?: Record<string, any>;
+}
+
+type minify = minifyFn | (minifyFn | minimizer)[] | minimizer;
 ```
 
 Default: `MinimizerPlugin.terserMinify`
@@ -328,6 +333,18 @@ Default: `MinimizerPlugin.terserMinify`
 Allows you to override the default minify function.
 By default plugin uses [terser](https://github.com/terser/terser) package.
 Useful for using and testing unpublished versions or forks.
+
+A minimizer can be written as an object instead, which is where its own
+options live — one minimizer configured in one place:
+
+```js
+new MinimizerPlugin({
+  minify: {
+    implementation: MinimizerPlugin.swcMinify,
+    options: { mangle: false },
+  },
+});
+```
 
 An array of functions can also be provided. Each minimizer can expose a
 `filter(name, info)` helper that decides whether it should run on a given
@@ -352,8 +369,9 @@ new MinimizerPlugin({
 
 When more than one minimizer in the array claims the same asset, the chain
 semantic still applies: the output of each accepting minimizer is fed as
-input to the next. The [`minimizerOptions`](#minimizeroptions) option may
-be an array (index-paired with `minify`) or a single object reused by every
+input to the next. A minimizer written as an object carries its own
+`options`; the deprecated [`minimizerOptions`](#minimizeroptions) may still be
+an array (index-paired with `minify`) or one object reused by every
 minimizer.
 
 The `test` option always defaults to `/\.[cm]?js(\?.*)?$/i`. When you mix
@@ -429,10 +447,9 @@ module.exports = {
 If an array of functions is passed to the `minify` option, each asset is
 dispatched to the minimizers whose `filter` accepts it. When more than one
 minimizer accepts the same asset the output of each is fed as input to the
-next one (the chain semantic). The `minimizerOptions` option can be either an
-array of option objects (index-paired with `minify`) or a single object that
-will be shared by all minimizers. Warnings, errors and extracted comments
-from all running minimizers are merged together.
+next one (the chain semantic). Each entry may be the minimizer itself or an
+object carrying that minimizer's own `options`. Warnings, errors and extracted
+comments from all running minimizers are merged together.
 
 **webpack.config.js**
 
@@ -442,14 +459,19 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: [MinimizerPlugin.terserMinify, MinimizerPlugin.swcMinify],
-        // `minimizerOptions` can be an array of options, one per `minify` entry
-        minimizerOptions: [
-          // Options for `MinimizerPlugin.terserMinify`
-          { mangle: false },
-          // Options for `MinimizerPlugin.swcMinify`
-          {},
-        ],
+        minify: {
+          implementation: [
+            MinimizerPlugin.terserMinify,
+            MinimizerPlugin.swcMinify,
+          ],
+          // One entry per implementation, in the same order
+          options: [
+            // Options for `MinimizerPlugin.terserMinify`
+            { mangle: false },
+            // Options for `MinimizerPlugin.swcMinify`
+            {},
+          ],
+        },
       }),
     ],
   },
@@ -510,13 +532,22 @@ type options = minimizerOptions | minimizerOptions[];
 
 Default: [default](https://github.com/terser/terser#minify-options)
 
-Options for the active minimizer. With the default Terser minify, see Terser's
+> **Note**
+>
+> `minimizerOptions` is deprecated in favour of a minimizer's own `options`,
+> which keeps one minimizer's configuration in one place — see
+> [`minify`](#minify). It keeps working, and setting both for the same
+> minimizer is an error. It is still the way to configure the **default**
+> minimizer without naming it.
+
+Options for the active minimizer, whichever of the two places they are given
+in. With the default Terser minify, see Terser's
 [minify options](https://github.com/terser/terser#minify-options).
 
-When the [`minify`](#minify) option is an array of minimizers, `minimizerOptions`
-can also be an array. Each element is passed to the minimizer at the same
-index in the `minify` array. If a single object is provided instead, it is
-reused for every minimizer.
+When the [`minify`](#minify) option is an array of minimizers,
+`minimizerOptions` can also be an array. Each element is passed to the
+minimizer at the same index in the `minify` array. If a single object is
+provided instead, it is reused for every minimizer.
 
 Two keys are filled in before a minimizer sees them, and only when the options
 do not already set them: `ecma`, from
@@ -1164,10 +1195,12 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: MinimizerPlugin.uglifyJsMinify,
-        // `minimizerOptions` will be passed to `uglify-js`
-        // Link to options - https://github.com/mishoo/UglifyJS#minify-options
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.uglifyJsMinify,
+          // `options` will be passed to `uglify-js`
+          // Link to options - https://github.com/mishoo/UglifyJS#minify-options
+          options: {},
+        },
       }),
     ],
   },
@@ -1192,10 +1225,12 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: MinimizerPlugin.swcMinify,
-        // `minimizerOptions` will be passed to `swc` (`@swc/core`)
-        // Link to options - https://swc.rs/docs/config-js-minify
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinify,
+          // `options` will be passed to `swc` (`@swc/core`)
+          // Link to options - https://swc.rs/docs/config-js-minify
+          options: {},
+        },
       }),
     ],
   },
@@ -1218,17 +1253,19 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: MinimizerPlugin.esbuildMinify,
-        // `minimizerOptions` will be passed to `esbuild`
-        // Link to options - https://esbuild.github.io/api/#minify
-        // Note: the `minify` options is true by default (and override other `minify*` options), so if you want to disable the `minifyIdentifiers` option (or other `minify*` options) please use:
-        // minimizerOptions: {
-        //   minify: false,
-        //   minifyWhitespace: true,
-        //   minifyIdentifiers: false,
-        //   minifySyntax: true,
-        // },
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinify,
+          // `options` will be passed to `esbuild`
+          // Link to options - https://esbuild.github.io/api/#minify
+          // Note: the `minify` options is true by default (and override other `minify*` options), so if you want to disable the `minifyIdentifiers` option (or other `minify*` options) please use:
+          // options: {
+          //   minify: false,
+          //   minifyWhitespace: true,
+          //   minifyIdentifiers: false,
+          //   minifySyntax: true,
+          // },
+          options: {},
+        },
       }),
     ],
   },
@@ -1251,9 +1288,11 @@ module.exports = {
       // Will minify JSON files (they can come from copy-webpack-plugin or when you are using asset modules)
       new MinimizerPlugin({
         test: /\.json$/,
-        minify: MinimizerPlugin.jsonMinify,
-        // We are supporting `space` and `replacer` options, you can set them below
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.jsonMinify,
+          // We are supporting `space` and `replacer` options, you can set them below
+          options: {},
+        },
       }),
     ],
   },
@@ -1316,11 +1355,13 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.htmlMinifierTerser,
-        // Options - https://github.com/terser/html-minifier-terser#options-quick-reference
-        minimizerOptions: {
-          collapseWhitespace: true,
-          removeComments: true,
+        minify: {
+          implementation: MinimizerPlugin.htmlMinifierTerser,
+          // Options - https://github.com/terser/html-minifier-terser#options-quick-reference
+          options: {
+            collapseWhitespace: true,
+            removeComments: true,
+          },
         },
       }),
     ],
@@ -1344,9 +1385,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyHtml,
-        // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtml,
+          // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
+          options: {},
+        },
       }),
     ],
   },
@@ -1369,9 +1412,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.template\.html$/i,
-        minify: MinimizerPlugin.swcMinifyHtmlFragment,
-        // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtmlFragment,
+          // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
+          options: {},
+        },
       }),
     ],
   },
@@ -1399,9 +1444,11 @@ module.exports = {
       "...",
       new Minimizer({
         test: /\.html(\?.*)?$/i,
-        minify: Minimizer.minifyHtmlNode,
-        // Options - https://github.com/wilsonzlin/minify-html#minification
-        minimizerOptions: {},
+        minify: {
+          implementation: Minimizer.minifyHtmlNode,
+          // Options - https://github.com/wilsonzlin/minify-html#minification
+          options: {},
+        },
       }),
     ],
   },
@@ -1465,10 +1512,12 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssnanoMinify,
-        // Options - https://cssnano.github.io/cssnano/docs/config-file/
-        minimizerOptions: {
-          preset: "default",
+        minify: {
+          implementation: MinimizerPlugin.cssnanoMinify,
+          // Options - https://cssnano.github.io/cssnano/docs/config-file/
+          options: {
+            preset: "default",
+          },
         },
       }),
     ],
@@ -1492,9 +1541,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssoMinify,
-        // Options - https://github.com/css/csso#minifysource-options
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.cssoMinify,
+          // Options - https://github.com/css/csso#minifysource-options
+          options: {},
+        },
       }),
     ],
   },
@@ -1517,9 +1568,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cleanCssMinify,
-        // Options - https://github.com/clean-css/clean-css#constructor-options
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.cleanCssMinify,
+          // Options - https://github.com/clean-css/clean-css#constructor-options
+          options: {},
+        },
       }),
     ],
   },
@@ -1542,9 +1595,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.esbuildMinifyCss,
-        // Options - https://esbuild.github.io/api/#transform-api
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinifyCss,
+          // Options - https://esbuild.github.io/api/#transform-api
+          options: {},
+        },
       }),
     ],
   },
@@ -1567,9 +1622,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.lightningCssMinify,
-        // Options - https://lightningcss.dev/transpilation.html
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.lightningCssMinify,
+          // Options - https://lightningcss.dev/transpilation.html
+          options: {},
+        },
       }),
     ],
   },
@@ -1592,9 +1649,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyCss,
-        // Options - https://github.com/swc-project/bindings/blob/main/packages/css/index.ts
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyCss,
+          // Options - https://github.com/swc-project/bindings/blob/main/packages/css/index.ts
+          options: {},
+        },
       }),
     ],
   },
@@ -1622,14 +1681,16 @@ module.exports = {
     minimizer: [
       new MinimizerPlugin({
         test: /\.(?:[cm]?js|css|html|json)(\?.*)?$/i,
-        minify: [
-          MinimizerPlugin.terserMinify,
-          cssMinify,
-          htmlMinify,
-          MinimizerPlugin.jsonMinify,
-        ],
-        // Positional: one entry per `minify` entry, in the same order.
-        minimizerOptions: [{}, {}, {}, {}],
+        minify: {
+          implementation: [
+            MinimizerPlugin.terserMinify,
+            cssMinify,
+            htmlMinify,
+            MinimizerPlugin.jsonMinify,
+          ],
+          // Positional: one entry per `minify` entry, in the same order.
+          options: [{}, {}, {}, {}],
+        },
       }),
     ],
   },
@@ -1845,15 +1906,17 @@ off.
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
-  minify: MinimizerPlugin.sharpMinify,
-  minimizerOptions: {
-    encodeOptions: {
-      // https://sharp.pixelplumbing.com/api-output
-      jpeg: { quality: 100 },
-      webp: { lossless: true },
-      avif: { lossless: true },
-      // PNG is already lossless at sharp's defaults
-      png: {},
+  minify: {
+    implementation: MinimizerPlugin.sharpMinify,
+    options: {
+      encodeOptions: {
+        // https://sharp.pixelplumbing.com/api-output
+        jpeg: { quality: 100 },
+        webp: { lossless: true },
+        avif: { lossless: true },
+        // PNG is already lossless at sharp's defaults
+        png: {},
+      },
     },
   },
 });
@@ -1864,14 +1927,16 @@ new MinimizerPlugin({
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
-  minify: MinimizerPlugin.napiRsImageMinify,
-  minimizerOptions: {
-    encodeOptions: {
-      // Anything below 100 re-encodes rather than repacking
-      jpeg: { quality: 80 },
-      webp: { quality: 80 },
-      avif: { quality: 70 },
-      // `png` has no quality setting — it is lossless either way
+  minify: {
+    implementation: MinimizerPlugin.napiRsImageMinify,
+    options: {
+      encodeOptions: {
+        // Anything below 100 re-encodes rather than repacking
+        jpeg: { quality: 80 },
+        webp: { quality: 80 },
+        avif: { quality: 70 },
+        // `png` has no quality setting — it is lossless either way
+      },
     },
   },
 });
@@ -1902,14 +1967,16 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.(png|jpe?g|webp|avif|tiff?|gif)$/i,
-        minify: MinimizerPlugin.sharpMinify,
-        minimizerOptions: {
-          // Options are keyed by sharp's format name
-          // https://sharp.pixelplumbing.com/api-output
-          encodeOptions: {
-            jpeg: { quality: 80 },
-            png: { compressionLevel: 9 },
-            webp: { lossless: true },
+        minify: {
+          implementation: MinimizerPlugin.sharpMinify,
+          options: {
+            // Options are keyed by sharp's format name
+            // https://sharp.pixelplumbing.com/api-output
+            encodeOptions: {
+              jpeg: { quality: 80 },
+              png: { compressionLevel: 9 },
+              webp: { lossless: true },
+            },
           },
         },
       }),
@@ -1923,21 +1990,23 @@ module.exports = {
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g)$/i,
-  minify: MinimizerPlugin.sharpMinify,
-  minimizerOptions: {
-    // `enabled` and `unit` ("px" by default, or "percent") are read here;
-    // everything else goes to sharp
-    // https://sharp.pixelplumbing.com/api-resize
-    resize: { width: 800, unit: "px", fit: "inside" },
-    // A number of degrees, or "auto" to follow the EXIF orientation
-    rotate: "auto",
-    flip: false,
-    flop: false,
-    grayscale: false,
-    // A sigma, or true for a fast default
-    blur: false,
-    sharpen: false,
-    encodeOptions: { jpeg: { quality: 80 } },
+  minify: {
+    implementation: MinimizerPlugin.sharpMinify,
+    options: {
+      // `enabled` and `unit` ("px" by default, or "percent") are read here;
+      // everything else goes to sharp
+      // https://sharp.pixelplumbing.com/api-resize
+      resize: { width: 800, unit: "px", fit: "inside" },
+      // A number of degrees, or "auto" to follow the EXIF orientation
+      rotate: "auto",
+      flip: false,
+      flop: false,
+      grayscale: false,
+      // A sigma, or true for a fast default
+      blur: false,
+      sharpen: false,
+      encodeOptions: { jpeg: { quality: 80 } },
+    },
   },
 });
 ```
@@ -1964,12 +2033,14 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.svg(\?.*)?$/i,
-        minify: MinimizerPlugin.svgoMinify,
-        minimizerOptions: {
-          // Options - https://github.com/svg/svgo#configuration
-          encodeOptions: {
-            multipass: true,
-            plugins: ["preset-default"],
+        minify: {
+          implementation: MinimizerPlugin.svgoMinify,
+          options: {
+            // Options - https://github.com/svg/svgo#configuration
+            encodeOptions: {
+              multipass: true,
+              plugins: ["preset-default"],
+            },
           },
         },
       }),
@@ -1996,14 +2067,16 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.(png|jpe?g|gif|svg)$/i,
-        minify: MinimizerPlugin.imageminMinify,
-        minimizerOptions: {
-          plugins: [
-            "gifsicle",
-            "mozjpeg",
-            ["pngquant", { quality: [0.6, 0.8] }],
-            "svgo",
-          ],
+        minify: {
+          implementation: MinimizerPlugin.imageminMinify,
+          options: {
+            plugins: [
+              "gifsicle",
+              "mozjpeg",
+              ["pngquant", { quality: [0.6, 0.8] }],
+              "svgo",
+            ],
+          },
         },
       }),
     ],
@@ -2045,19 +2118,21 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.(png|jpe?g|webp|avif)$/i,
-        minify: MinimizerPlugin.napiRsImageMinify,
-        minimizerOptions: {
-          // Options are keyed by the format's own name
-          // https://github.com/Brooooooklyn/Image#usage
-          encodeOptions: {
-            // `PNGLosslessOptions`
-            png: { force: true },
-            // `JpegCompressOptions`
-            jpeg: { quality: 80 },
-            // `AvifConfig`
-            avif: { quality: 70, speed: 4 },
-            // The quality factor, 0-100
-            webp: { quality: 80 },
+        minify: {
+          implementation: MinimizerPlugin.napiRsImageMinify,
+          options: {
+            // Options are keyed by the format's own name
+            // https://github.com/Brooooooklyn/Image#usage
+            encodeOptions: {
+              // `PNGLosslessOptions`
+              png: { force: true },
+              // `JpegCompressOptions`
+              jpeg: { quality: 80 },
+              // `AvifConfig`
+              avif: { quality: 70, speed: 4 },
+              // The quality factor, 0-100
+              webp: { quality: 80 },
+            },
           },
         },
       }),
@@ -2222,19 +2297,21 @@ module.exports = {
     minimizer: [
       new MinimizerPlugin({
         test: /\.(js|css|svg|png|jpe?g)$/i,
-        minify: [
-          MinimizerPlugin.terserMinify,
-          MinimizerPlugin.cssnanoMinify,
-          MinimizerPlugin.svgoMinify,
-          MinimizerPlugin.sharpMinify,
-        ],
-        // One entry per minimizer, in the same order
-        minimizerOptions: [
-          {},
-          {},
-          {},
-          { encodeOptions: { png: { compressionLevel: 9 } } },
-        ],
+        minify: {
+          implementation: [
+            MinimizerPlugin.terserMinify,
+            MinimizerPlugin.cssnanoMinify,
+            MinimizerPlugin.svgoMinify,
+            MinimizerPlugin.sharpMinify,
+          ],
+          // One entry per minimizer, in the same order
+          options: [
+            {},
+            {},
+            {},
+            { encodeOptions: { png: { compressionLevel: 9 } } },
+          ],
+        },
       }),
     ],
   },
@@ -2313,96 +2390,122 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin<SwcOptions>({
-        minify: MinimizerPlugin.swcMinify,
-        minimizerOptions: {
-          // `swc` options
+        minify: {
+          implementation: MinimizerPlugin.swcMinify,
+          options: {
+            // `swc` options
+          },
         },
       }),
       new MinimizerPlugin<UglifyJSOptions>({
-        minify: MinimizerPlugin.uglifyJsMinify,
-        minimizerOptions: {
-          // `uglif-js` options
+        minify: {
+          implementation: MinimizerPlugin.uglifyJsMinify,
+          options: {
+            // `uglif-js` options
+          },
         },
       }),
       new MinimizerPlugin<EsbuildOptions>({
-        minify: MinimizerPlugin.esbuildMinify,
-        minimizerOptions: {
-          // `esbuild` options
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinify,
+          options: {
+            // `esbuild` options
+          },
         },
       }),
 
       // Alternative usage:
       new MinimizerPlugin<TerserOptions>({
-        minify: MinimizerPlugin.terserMinify,
-        minimizerOptions: {
-          // `terser` options
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: {
+            // `terser` options
+          },
         },
       }),
 
       // HTML minimizers
       new MinimizerPlugin<HtmlMinifierTerserOptions>({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.htmlMinifierTerser,
-        minimizerOptions: {
-          // `html-minifier-terser` options
+        minify: {
+          implementation: MinimizerPlugin.htmlMinifierTerser,
+          options: {
+            // `html-minifier-terser` options
+          },
         },
       }),
       new MinimizerPlugin<SwcHtmlOptions>({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyHtml,
-        minimizerOptions: {
-          // `@swc/html` options
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtml,
+          options: {
+            // `@swc/html` options
+          },
         },
       }),
       new MinimizerPlugin<SwcHtmlFragmentOptions>({
         test: /\.template\.html$/i,
-        minify: MinimizerPlugin.swcMinifyHtmlFragment,
-        minimizerOptions: {
-          // `@swc/html` fragment options
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtmlFragment,
+          options: {
+            // `@swc/html` fragment options
+          },
         },
       }),
 
       // CSS minimizers
       new MinimizerPlugin<CssnanoOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssnanoMinify,
-        minimizerOptions: {
-          // `cssnano` options
+        minify: {
+          implementation: MinimizerPlugin.cssnanoMinify,
+          options: {
+            // `cssnano` options
+          },
         },
       }),
       new MinimizerPlugin<CssoOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssoMinify,
-        minimizerOptions: {
-          // `csso` options
+        minify: {
+          implementation: MinimizerPlugin.cssoMinify,
+          options: {
+            // `csso` options
+          },
         },
       }),
       new MinimizerPlugin<CleanCssOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cleanCssMinify,
-        minimizerOptions: {
-          // `clean-css` options
+        minify: {
+          implementation: MinimizerPlugin.cleanCssMinify,
+          options: {
+            // `clean-css` options
+          },
         },
       }),
       new MinimizerPlugin<EsbuildOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.esbuildMinifyCss,
-        minimizerOptions: {
-          // `esbuild` options (CSS loader)
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinifyCss,
+          options: {
+            // `esbuild` options (CSS loader)
+          },
         },
       }),
       new MinimizerPlugin<LightningCssOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.lightningCssMinify,
-        minimizerOptions: {
-          // `lightningcss` options
+        minify: {
+          implementation: MinimizerPlugin.lightningCssMinify,
+          options: {
+            // `lightningcss` options
+          },
         },
       }),
       new MinimizerPlugin<SwcCssOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyCss,
-        minimizerOptions: {
-          // `@swc/css` options
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyCss,
+          options: {
+            // `@swc/css` options
+          },
         },
       }),
     ],
@@ -2420,7 +2523,7 @@ build instead of two. The options line up like this:
 | `image-minimizer-webpack-plugin`   | here                                              |
 | ---------------------------------- | ------------------------------------------------- |
 | `minimizer.implementation`         | [`minify`](#minify)                               |
-| `minimizer.options`                | [`minimizerOptions`](#minimizeroptions)           |
+| `minimizer.options`                | `options` on that minimizer                       |
 | `minimizer.filter`                 | a `filter` on the minimizer itself                |
 | `generator[].implementation`       | [`generate`](#generate)                           |
 | `generator[].options`              | `options` on that generator                       |

@@ -193,6 +193,13 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private generate;
   /**
+   * The same check as `validateGenerators`, for a minimizer: its options
+   * cannot come from `minify` and the deprecated `minimizerOptions` both.
+   * @private
+   * @returns {void}
+   */
+  private validateMinimizers;
+  /**
    * Cross-field checks the schema cannot make: options given twice for one
    * generator, and a `generatorOptions` key naming no generator.
    * @private

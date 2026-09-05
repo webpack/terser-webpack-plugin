@@ -16,13 +16,14 @@ const {
   imageminMinify,
   imageminNormalizeConfig,
   interpolateSize,
-  isGeneratorDescriptor,
+  isDescriptor,
   isPresets,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  normalizeMinimizers,
   readPreset,
   sharpGenerate,
   sharpMinify,
@@ -285,10 +286,9 @@ class TerserPlugin {
       parallel,
       include,
       exclude,
-      minimizer: {
-        implementation: minify,
-        options: resolvedMinimizerOptions,
-      },
+      minimizer:
+        /** @type {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} */
+        (normalizeMinimizers(minify, resolvedMinimizerOptions)),
       // Absent unless asked for: it runs while modules build, where the plugin
       // otherwise does nothing.
       generator: generate
@@ -1146,7 +1146,7 @@ class TerserPlugin {
    * @returns {{ name: string | undefined, implementation: EXPECTED_ANY, options: EXPECTED_ANY, type: string | undefined, filename: string | undefined, filter: ((name: string) => boolean) | undefined, deleteOriginalAssets: boolean | undefined }} the generator
    */
   describeGenerator(name, entry, declared) {
-    const descriptor = isGeneratorDescriptor(entry) ? entry : undefined;
+    const descriptor = isDescriptor(entry) ? entry : undefined;
     const own = descriptor ? descriptor.options : undefined;
 
     return {
@@ -1179,7 +1179,7 @@ class TerserPlugin {
     const written = generator.implementation;
     const declared = generator.options;
 
-    if (!isPresets(written) || isGeneratorDescriptor(written)) {
+    if (!isPresets(written) || isDescriptor(written)) {
       return [this.describeGenerator(undefined, written, declared)];
     }
 
@@ -1751,6 +1751,43 @@ class TerserPlugin {
   }
 
   /**
+   * The same check as `validateGenerators`, for a minimizer: its options
+   * cannot come from `minify` and the deprecated `minimizerOptions` both.
+   * @private
+   * @returns {void}
+   */
+  validateMinimizers() {
+    // TODO drop this check in the next major release, with the deprecated
+    // `minimizerOptions` it is about.
+    const { minify, minimizerOptions, terserOptions } = this.rawOptions;
+    const declared =
+      typeof minimizerOptions === "undefined"
+        ? terserOptions
+        : minimizerOptions;
+
+    if (typeof declared === "undefined") {
+      return;
+    }
+
+    const written = Array.isArray(minify) ? minify : [minify];
+
+    for (const [index, one] of written.entries()) {
+      const own = isDescriptor(one) ? one.options : undefined;
+      const twice = Array.isArray(minify)
+        ? getMinimizerOptionsAt(declared, index)
+        : declared;
+
+      if (typeof own !== "undefined" && typeof twice !== "undefined") {
+        throw new Error(
+          Array.isArray(minify)
+            ? `The minimizer at \`minify[${index}]\` sets its own \`options\`, and the deprecated \`minimizerOptions\` sets them too. Keep the one in \`minify\`.`
+            : "`minify` sets its own `options`, and the deprecated `minimizerOptions` sets them too. Keep the one in `minify`.",
+        );
+      }
+    }
+  }
+
+  /**
    * Cross-field checks the schema cannot make: options given twice for one
    * generator, and a `generatorOptions` key naming no generator.
    * @private
@@ -1767,7 +1804,7 @@ class TerserPlugin {
 
     const written = generator.implementation;
     const declared = generator.options;
-    const named = isPresets(written) && !isGeneratorDescriptor(written);
+    const named = isPresets(written) && !isDescriptor(written);
     const presets =
       /** @type {{ [preset: string]: EXPECTED_ANY }} */
       (/** @type {unknown} */ (written));
@@ -1777,7 +1814,7 @@ class TerserPlugin {
 
     for (const name of named ? Object.keys(presets) : [undefined]) {
       const entry = typeof name === "undefined" ? written : presets[name];
-      const own = isGeneratorDescriptor(entry) ? entry.options : undefined;
+      const own = isDescriptor(entry) ? entry.options : undefined;
       const twice =
         typeof name === "undefined" ? declared : perPreset && perPreset[name];
 
@@ -1820,6 +1857,7 @@ class TerserPlugin {
         this.rawOptions,
         VALIDATION_CONFIGURATION,
       );
+      this.validateMinimizers();
       this.validateGenerators();
 
       return;
@@ -1834,6 +1872,7 @@ class TerserPlugin {
       this.rawOptions,
       VALIDATION_CONFIGURATION,
     );
+    this.validateMinimizers();
     this.validateGenerators();
   }
 
