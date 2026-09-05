@@ -24,9 +24,9 @@ const answerText = (answer) =>
 
 // Anything the renderer throws is reported rather than dropped, and the body is
 // spelled as an untapped run spells it — which is what webpack's minifiers do.
-const askRenderer = async (render, source, type) => {
+const askRenderer = async (render, source, type, as) => {
   try {
-    return await render(source, { type });
+    return await render(source, as === undefined ? { type } : { type, as });
   } catch (error) {
     return { errors: [error] };
   }
@@ -217,10 +217,47 @@ failingJsMinify.supportsWorkerThreads = () => false;
 failingJsMinify.filter = () => false;
 
 /**
+ * A module script: `await` at the top level is a syntax error in a classic one,
+ * so which production a body is written in decides whether it can be read.
+ */
+const MODULE_BODY = "window.ran = true;\nawait Promise.resolve();\n";
+
+/**
+ * A document minifier handing out one inline `<script type=module>`: the
+ * language is JavaScript, and `as` names which of its two productions the body
+ * is written in.
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {{ as?: string, renderEmbeddedSource: (source: string, info: { type: string, as?: string }) => Promise<EXPECTED_ANY> }} minimizerOptions minimizer options
+ * @returns {Promise<EXPECTED_ANY>} the body as its minimizer wrote it
+ */
+async function moduleScriptMinify(input, sourceMap, minimizerOptions) {
+  const rendered = await askRenderer(
+    minimizerOptions.renderEmbeddedSource,
+    MODULE_BODY,
+    "javascript",
+    minimizerOptions.as,
+  );
+  const text = answerText(rendered);
+
+  return {
+    code: typeof text === "string" ? text : MODULE_BODY,
+    ...answerDiagnostics([rendered]),
+  };
+}
+
+moduleScriptMinify.getTypes = () => ["page"];
+moduleScriptMinify.getEmbeddedTypes = () => ["javascript"];
+moduleScriptMinify.supportsWorker = () => false;
+moduleScriptMinify.supportsWorkerThreads = () => false;
+moduleScriptMinify.filter = (name) => /\.page$/i.test(name);
+
+/**
  * @param {EXPECTED_ANY[]} minify minify functions
+ * @param {EXPECTED_ANY[]=} minimizerOptions one options object per minify function
  * @returns {import("webpack").Compiler} compiler with the document emitted as an asset
  */
-const getPageCompiler = (minify) => {
+const getPageCompiler = (minify, minimizerOptions) => {
   const compiler = getCompiler({
     entry: path.resolve(__dirname, "./fixtures/embedded/entry-page.js"),
     target: "node",
@@ -235,7 +272,7 @@ const getPageCompiler = (minify) => {
   new MinimizerPlugin({
     test: /\.page$/i,
     minify,
-    minimizerOptions: minify.map(() => ({})),
+    minimizerOptions: minimizerOptions || minify.map(() => ({})),
     parallel: false,
   }).apply(compiler);
 
@@ -490,5 +527,72 @@ describe("embedded dispatch shapes", () => {
     expect(readAsset("host.page", compiler, stats)).toContain(
       "<style>.a{color:red}</style>",
     );
+  });
+});
+
+describe("which production of JavaScript a body is written in", () => {
+  it.each([
+    [
+      "terserMinify",
+      MinimizerPlugin.terserMinify,
+      "window.ran=!0,await Promise.resolve();",
+    ],
+    [
+      "uglifyJsMinify",
+      MinimizerPlugin.uglifyJsMinify,
+      "window.ran=!0,await Promise.resolve();",
+    ],
+    [
+      "swcMinify",
+      MinimizerPlugin.swcMinify,
+      "window.ran=!0,await Promise.resolve();",
+    ],
+    [
+      "esbuildMinify",
+      MinimizerPlugin.esbuildMinify,
+      "window.ran=!0,await Promise.resolve();\n",
+    ],
+  ])(
+    "reads a body handed out as a module with `%s`",
+    async (name, minifier, expected) => {
+      const compiler = getPageCompiler(
+        [moduleScriptMinify, minifier],
+        [{ as: "module" }, {}],
+      );
+      const stats = await compile(compiler);
+
+      expect(getErrors(stats)).toEqual([]);
+      expect(getWarnings(stats)).toEqual([]);
+      expect(readAsset("host.page", compiler, stats)).toBe(expected);
+    },
+  );
+
+  it("reads one as a classic script when that is what it is handed out as", async () => {
+    const compiler = getPageCompiler(
+      [moduleScriptMinify, MinimizerPlugin.terserMinify],
+      [{ as: "classic" }, {}],
+    );
+    const stats = await compile(compiler);
+
+    // The word itself never reaches the engine, which would answer
+    // "`as` is not a supported option" rather than reading the source at all.
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(/Unexpected token: name \(Promise\)/);
+    expect(stats.compilation.getAsset("host.page").source.source()).toBe(
+      MODULE_BODY,
+    );
+  });
+
+  it("leaves the production to the minimizer when none is named", async () => {
+    const compiler = getPageCompiler([
+      moduleScriptMinify,
+      MinimizerPlugin.terserMinify,
+    ]);
+    const stats = await compile(compiler);
+
+    // Nothing says which production this is, so it is read as the classic
+    // script `terser` defaults to — which is what an inline script is.
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(/Unexpected token: name \(Promise\)/);
   });
 });

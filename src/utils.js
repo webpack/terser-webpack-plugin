@@ -338,13 +338,16 @@ async function terserMinify(
   };
 
   /**
-   * @param {import("terser").MinifyOptions=} terserOptions terser options
+   * @param {(import("terser").MinifyOptions & { as?: string })=} terserOptions terser options
    * @returns {import("terser").MinifyOptions & { sourceMap: import("terser").SourceMapOptions | undefined } & { compress: import("terser").CompressOptions } & ({ output: import("terser").FormatOptions & { beautify: boolean } } | { format: import("terser").FormatOptions & { beautify: boolean } })} built terser options
    */
-  const buildTerserOptions = (terserOptions = {}) =>
+  const buildTerserOptions = ({ as, ...terserOptions } = {}) =>
     // Need deep copy objects to avoid https://github.com/terser/terser/issues/366
     ({
       ...terserOptions,
+      // `as` names which production of JavaScript the source is, and is the
+      // source's own rather than the configuration's, so it overrides `module`.
+      ...(typeof as === "undefined" ? undefined : { module: as === "module" }),
       compress:
         typeof terserOptions.compress === "boolean"
           ? terserOptions.compress
@@ -593,10 +596,14 @@ async function uglifyJsMinify(
   };
 
   /**
-   * @param {import("uglify-js").MinifyOptions & { ecma?: number | string }=} uglifyJsOptions uglify-js options
+   * @param {import("uglify-js").MinifyOptions & { ecma?: number | string, as?: string }=} uglifyJsOptions uglify-js options
    * @returns {import("uglify-js").MinifyOptions & { sourceMap: boolean | import("uglify-js").SourceMapOptions | undefined } & { output: import("uglify-js").OutputOptions & { beautify: boolean } }} uglify-js options
    */
   const buildUglifyJsOptions = (uglifyJsOptions = {}) => {
+    // `as` names which production of JavaScript the source is. An inherited
+    // `module` is the asset's rather than the source's, so it still goes.
+    const { as } = uglifyJsOptions;
+
     if (typeof uglifyJsOptions.ecma !== "undefined") {
       delete uglifyJsOptions.ecma;
     }
@@ -605,9 +612,14 @@ async function uglifyJsMinify(
       delete uglifyJsOptions.module;
     }
 
+    if (typeof as !== "undefined") {
+      delete uglifyJsOptions.as;
+    }
+
     // Need deep copy objects to avoid https://github.com/terser/terser/issues/366
     return {
       ...uglifyJsOptions,
+      ...(typeof as === "undefined" ? undefined : { module: as === "module" }),
       // warnings: uglifyJsOptions.warnings,
       parse: { ...uglifyJsOptions.parse },
       compress:
@@ -803,13 +815,16 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
   };
 
   /**
-   * @param {import("@swc/core").JsMinifyOptions=} swcOptions swc options
+   * @param {(import("@swc/core").JsMinifyOptions & { as?: string })=} swcOptions swc options
    * @returns {import("@swc/core").JsMinifyOptions & { extractComments?: false | true | "some" | "all" | { regex: string } } & { sourceMap: undefined | boolean } & { compress: import("@swc/core").TerserCompressOptions }} built swc options
    */
-  const buildSwcOptions = (swcOptions = {}) =>
+  const buildSwcOptions = ({ as, ...swcOptions } = {}) =>
     // Need deep copy objects to avoid https://github.com/terser/terser/issues/366
     ({
       ...swcOptions,
+      // `as` names which production of JavaScript the source is, and is the
+      // source's own rather than the configuration's, so it overrides `module`.
+      ...(typeof as === "undefined" ? undefined : { module: as === "module" }),
       compress:
         typeof swcOptions.compress === "boolean"
           ? swcOptions.compress
@@ -938,11 +953,19 @@ swcMinify.filter = (name) => JS_FILE_RE.test(name);
  */
 async function esbuildMinify(input, sourceMap, minimizerOptions) {
   /**
-   * @param {import("esbuild").TransformOptions & { ecma?: string | number, module?: boolean }=} esbuildOptions esbuild options
+   * @param {import("esbuild").TransformOptions & { ecma?: string | number, module?: boolean, as?: string }=} esbuildOptions esbuild options
    * @returns {import("esbuild").TransformOptions} built esbuild options
    */
   const buildEsbuildOptions = (esbuildOptions = {}) => {
     delete esbuildOptions.ecma;
+
+    // `as` names which production of JavaScript the source is, and is the
+    // source's own rather than the configuration's, so it overrides `module`.
+    if (typeof esbuildOptions.as !== "undefined") {
+      esbuildOptions.module = esbuildOptions.as === "module";
+
+      delete esbuildOptions.as;
+    }
 
     if (esbuildOptions.module) {
       esbuildOptions.format = "esm";
