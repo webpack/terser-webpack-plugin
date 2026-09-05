@@ -1152,6 +1152,8 @@ class TerserPlugin {
     return {
       name,
       implementation: descriptor ? descriptor.implementation : entry,
+      // TODO remove the `generatorOptions` fallback in the next major release,
+      // where a generator's options are its own.
       options: (typeof own === "undefined" ? declared : own) || {},
       type: descriptor ? descriptor.type : undefined,
       filename: descriptor ? descriptor.filename : undefined,
@@ -1755,6 +1757,8 @@ class TerserPlugin {
    * @returns {void}
    */
   validateGenerators() {
+    // TODO drop both checks in the next major release, with the deprecated
+    // `generatorOptions` they are about.
     const { generator } = this.options;
 
     if (!generator) {

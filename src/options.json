@@ -324,7 +324,7 @@
       ]
     },
     "generatorOptions": {
-      "description": "Deprecated alias for the `options` of a `generate` generator. Options for the `generate` function, keyed by name where `generate` names its generators.",
+      "description": "Deprecated way of giving a `generate` generator its options, to be removed in the next major release. Prefer a generator's own `options`. Keyed by name where `generate` names its generators.",
       "link": "https://github.com/webpack/minimizer-webpack-plugin#generatoroptions",
       "anyOf": [
         {

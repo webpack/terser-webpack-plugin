@@ -120,7 +120,6 @@ Using supported `devtool` values enable source map generation.
 - **[`minify`](#minify)**
 - **[`minimizerOptions`](#minimizeroptions)**
 - **[`generate`](#generate)**
-- **[`generatorOptions`](#generatoroptions)**
 - **[`extractComments`](#extractcomments)**
 
 ### `test`
@@ -610,8 +609,7 @@ bytes plus the generator and its options.
 
 Two generators ship with the plugin, and they differ in who picks the format.
 `sharpGenerate` is told: it takes the target from the request's `?as=` or,
-failing that, from a [`generatorOptions.encodeOptions`](#generatoroptions)
-naming exactly one format, and reports an error when neither says which format
+failing that, from an `options.encodeOptions` naming exactly one format, and reports an error when neither says which format
 to write. `imageminGenerate` is not: its plugins decide, so it reads the format
 back off the bytes they produced and renames to match, leaving an asset its
 plugins did not convert under the name it had.
@@ -652,13 +650,14 @@ one by name with `?as=`:
 new MinimizerPlugin({
   test: /\.(jpe?g|png)$/i,
   generate: {
-    webp: MinimizerPlugin.sharpGenerate,
-    avif: MinimizerPlugin.sharpGenerate,
-  },
-  // Keyed by preset name, rather than positionally, when `generate` is.
-  generatorOptions: {
-    webp: { encodeOptions: { webp: { quality: 90 } } },
-    avif: { encodeOptions: { avif: { quality: 50 } } },
+    webp: {
+      implementation: MinimizerPlugin.sharpGenerate,
+      options: { encodeOptions: { webp: { quality: 90 } } },
+    },
+    avif: {
+      implementation: MinimizerPlugin.sharpGenerate,
+      options: { encodeOptions: { avif: { quality: 50 } } },
+    },
   },
 });
 ```
@@ -682,8 +681,6 @@ new MinimizerPlugin({
   generate: {
     webp: {
       implementation: MinimizerPlugin.sharpGenerate,
-      // Where this generator's options belong. `generatorOptions` still works
-      // but is deprecated, and setting both for one generator is an error.
       options: { encodeOptions: { webp: {} } },
       type: "asset",
       // Optional. Without it the generator's own name for the result is used,
@@ -709,6 +706,11 @@ interchangeable:
   `?as=` cannot reach it and it runs on any webpack. An asset already generated
   is never generated from again.
 
+`ecma` is filled in from
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
+unless a generator's options set it, the same way it is for
+[`minimizerOptions`](#minimizeroptions).
+
 `filename` is a
 [webpack filename template](https://webpack.js.org/configuration/output/#outputfilename)
 resolved against the asset read, so `[path]`, `[name]`, `[base]`, `[ext]` and
@@ -723,7 +725,7 @@ run it again, since its answer is cached under the bytes.
 The same holds across runs under
 [`cache.type: "filesystem"`](https://webpack.js.org/configuration/cache/#cachetype),
 where a module is restored from the pack rather than rebuilt. That restored
-result is the generator's, so changing `generate` or `generatorOptions` has to
+result is the generator's, so changing a generator or its options has to
 invalidate the pack, and the plugin adds their identity to
 [`cache.version`](https://webpack.js.org/configuration/cache/#cacheversion) so
 it does. This needs the plugin to be in the config — `plugins` or
@@ -734,56 +736,21 @@ removed.
 
 > **Note**
 >
+> **Note**
+>
+> `generatorOptions` is kept as a deprecated way of giving a generator its
+> options — one object for one generator, an array positionally matching an
+> array of them, or keyed by name where `generate` names its generators. Prefer
+> a generator's own `options`. Setting both for one generator is an error, and
+> a key naming no generator is an error rather than silently doing nothing.
+
+> **Note**
+>
 > An `"import"` generator needs a webpack whose `NormalModule` `processResult`
 > hook can be awaited (**5.111** or newer), since that is where a rename has to
 > happen. On an older webpack the plugin reports an error rather than silently
 > generating nothing. An `"asset"` generator does not use that hook and works on
 > any supported webpack.
-
-### `generatorOptions`
-
-Type:
-
-```ts
-type generatorOptions = Record<string, any> | Record<string, any>[];
-```
-
-Default: `{}`
-
-> **Note**
->
-> `generatorOptions` is deprecated in favour of a generator's own `options`,
-> which keeps one generator's configuration in one place — see
-> [`generate`](#generate). It keeps working; setting both for the same
-> generator is an error, and a key naming no generator is an error rather than
-> silently doing nothing.
-
-Options for [`generate`](#generate), exactly as
-[`minimizerOptions`](#minimizeroptions) is for [`minify`](#minify): one object
-for one generator, or an array positionally matching an array of generators. A
-single object handed an array of generators is reused for every one of them.
-Where `generate` names its generators, this is keyed by the same names.
-
-`ecma` is filled in from
-[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
-unless the options set it, the same way it is for
-[`minimizerOptions`](#minimizeroptions).
-
-```js
-const MinimizerPlugin = require("minimizer-webpack-plugin");
-
-module.exports = {
-  plugins: [
-    new MinimizerPlugin({
-      test: /\.(jpe?g|png)$/i,
-      generate: MinimizerPlugin.sharpGenerate,
-      // Names the format when the request does not, and carries the encoder's
-      // own settings either way.
-      generatorOptions: { encodeOptions: { webp: { quality: 90 } } },
-    }),
-  ],
-};
-```
 
 ### `extractComments`
 
@@ -2450,21 +2417,21 @@ This plugin does what
 did, for every asset type rather than images alone, so one plugin covers a
 build instead of two. The options line up like this:
 
-| `image-minimizer-webpack-plugin`   | here                                                     |
-| ---------------------------------- | -------------------------------------------------------- |
-| `minimizer.implementation`         | [`minify`](#minify)                                      |
-| `minimizer.options`                | [`minimizerOptions`](#minimizeroptions)                  |
-| `minimizer.filter`                 | a `filter` on the minimizer itself                       |
-| `generator[].implementation`       | [`generate`](#generate)                                  |
-| `generator[].options`              | [`generatorOptions`](#generatoroptions), keyed by preset |
-| `generator[].preset`               | the key the generator is written under                   |
-| `generator[].type`                 | `type` on that generator                                 |
-| `generator[].filename` / `.filter` | `filename` / `filter` on that generator                  |
-| `deleteOriginalAssets`             | `deleteOriginalAssets` on that generator                 |
-| `concurrency`                      | [`parallel`](#parallel)                                  |
-| `test` / `include` / `exclude`     | unchanged                                                |
-| `loader`                           | nothing — `generate` reaches a module without one        |
-| `severityError`                    | nothing — a failed minimizer is an error                 |
+| `image-minimizer-webpack-plugin`   | here                                              |
+| ---------------------------------- | ------------------------------------------------- |
+| `minimizer.implementation`         | [`minify`](#minify)                               |
+| `minimizer.options`                | [`minimizerOptions`](#minimizeroptions)           |
+| `minimizer.filter`                 | a `filter` on the minimizer itself                |
+| `generator[].implementation`       | [`generate`](#generate)                           |
+| `generator[].options`              | `options` on that generator                       |
+| `generator[].preset`               | the key the generator is written under            |
+| `generator[].type`                 | `type` on that generator                          |
+| `generator[].filename` / `.filter` | `filename` / `filter` on that generator           |
+| `deleteOriginalAssets`             | `deleteOriginalAssets` on that generator          |
+| `concurrency`                      | [`parallel`](#parallel)                           |
+| `test` / `include` / `exclude`     | unchanged                                         |
+| `loader`                           | nothing — `generate` reaches a module without one |
+| `severityError`                    | nothing — a failed minimizer is an error          |
 
 The minimizers and generators keep their names —
 `imageminMinify`, `imageminGenerate`, `imageminNormalizeConfig`, `sharpMinify`,
@@ -2515,9 +2482,9 @@ module.exports = {
         webp: {
           type: "asset",
           implementation: MinimizerPlugin.sharpGenerate,
+          options: { encodeOptions: { webp: { quality: 90 } } },
         },
       },
-      generatorOptions: { webp: { encodeOptions: { webp: { quality: 90 } } } },
     }),
   ],
 };
