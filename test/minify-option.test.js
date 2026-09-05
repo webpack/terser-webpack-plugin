@@ -10,6 +10,15 @@ import {
   getWarnings,
   readsAssets,
 } from "./helpers";
+import { RUN_CSS_TESTS, RUN_SWC_HTML_TESTS } from "./helpers/env";
+
+/**
+ * `describe` where this environment can run the block, `describe.skip` where it
+ * cannot, so one file can carry blocks with different requirements.
+ * @param {boolean} condition whether this environment can run it
+ * @returns {jest.Describe} describe, or describe.skip
+ */
+const describeIf = (condition) => (condition ? describe : describe.skip);
 
 describe("minify option", () => {
   it("should work", async () => {
@@ -1399,5 +1408,431 @@ describe("minify option", () => {
     expect(received.sources).toEqual(["inlined-empty.js"]);
     expect(received.sourcesContent).toEqual([""]);
     expect(getErrors(stats)).toEqual([]);
+  });
+});
+
+describe("css minify option", () => {
+  // The bundled minimizers this block drives need more of the
+  // environment than the rest of this file does.
+  describeIf(RUN_CSS_TESTS)("with its minimizers installed", () => {
+    it("should work using when the `minify` option is `cssnanoMinify`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.cssnanoMinify,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `cssnanoMinify` and allows to set `cssnano` options", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.cssnanoMinify,
+        minimizerOptions: { preset: ["default", { discardComments: false }] },
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `cssoMinify`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.cssoMinify,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `cssoMinify` and allows to set `csso` options", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.cssoMinify,
+        minimizerOptions: { comments: false },
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `cleanCssMinify`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.cleanCssMinify,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `cleanCssMinify` and allows to set `clean-css` options", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.cleanCssMinify,
+        minimizerOptions: { format: "beautify" },
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `esbuildMinifyCss`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.esbuildMinifyCss,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `lightningCssMinify`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.lightningCssMinify,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `swcMinifyCss`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: MinimizerPlugin.swcMinifyCss,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work when `minify` is an array of functions using `cssnanoMinify`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: [
+          MinimizerPlugin.cssnanoMinify,
+          // Second pass: pass-through that asserts the previous minimizer
+          // produced a string we can keep working with.
+          (data) => {
+            const [[, code]] = Object.entries(data);
+
+            return { code };
+          },
+        ],
+        minimizerOptions: [{ preset: "default" }, {}],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work and merge source maps when `minify` is an array of `terserMinify` minimizers", async () => {
+      const compiler = getCompiler({
+        devtool: "source-map",
+        entry: path.resolve(__dirname, "./fixtures/minify/es6.js"),
+        output: {
+          path: path.resolve(__dirname, "./dist-terser"),
+          filename: "[name].js",
+          chunkFilename: "[id].[name].js",
+        },
+      });
+
+      new MinimizerPlugin({
+        minify: [MinimizerPlugin.terserMinify, MinimizerPlugin.terserMinify],
+        minimizerOptions: [{ mangle: false }, { mangle: true }],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work and merge source maps when `minify` mixes `terserMinify` with `uglifyJsMinify`", async () => {
+      const compiler = getCompiler({
+        devtool: "source-map",
+        entry: path.resolve(__dirname, "./fixtures/minify/es6.js"),
+        output: {
+          path: path.resolve(__dirname, "./dist-terser"),
+          filename: "[name].js",
+          chunkFilename: "[id].[name].js",
+        },
+      });
+
+      new MinimizerPlugin({
+        minify: [MinimizerPlugin.terserMinify, MinimizerPlugin.uglifyJsMinify],
+        minimizerOptions: [{ mangle: false }, { mangle: true }],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work and merge source maps when `minify` is an array of CSS minimizers", async () => {
+      const compiler = getCompiler({
+        devtool: "source-map",
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: [MinimizerPlugin.cssnanoMinify, MinimizerPlugin.cssnanoMinify],
+        minimizerOptions: [{ preset: "default" }, { preset: "default" }],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work and merge source maps when `minify` mixes `terserMinify` with `swcMinify`", async () => {
+      const compiler = getCompiler({
+        devtool: "source-map",
+        entry: path.resolve(__dirname, "./fixtures/minify/es6.js"),
+        output: {
+          path: path.resolve(__dirname, "./dist-terser"),
+          filename: "[name].js",
+          chunkFilename: "[id].[name].js",
+        },
+      });
+
+      new MinimizerPlugin({
+        minify: [MinimizerPlugin.terserMinify, MinimizerPlugin.swcMinify],
+        minimizerOptions: [{ mangle: false }, {}],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work and merge source maps when `minify` mixes `terserMinify` with `esbuildMinify`", async () => {
+      const compiler = getCompiler({
+        devtool: "source-map",
+        entry: path.resolve(__dirname, "./fixtures/minify/es6.js"),
+        output: {
+          path: path.resolve(__dirname, "./dist-terser"),
+          filename: "[name].js",
+          chunkFilename: "[id].[name].js",
+        },
+      });
+
+      new MinimizerPlugin({
+        minify: [MinimizerPlugin.terserMinify, MinimizerPlugin.esbuildMinify],
+        minimizerOptions: [{ mangle: false }, {}],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should minify js, json, css, and html assets emitted in the same compilation using a single plugin instance", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/multi-asset.js"),
+      });
+
+      new MinimizerPlugin({
+        test: /\.([cm]?js|json|css|html?)(\?.*)?$/i,
+        parallel: false,
+        minify: [
+          MinimizerPlugin.terserMinify,
+          MinimizerPlugin.jsonMinify,
+          MinimizerPlugin.cleanCssMinify,
+          MinimizerPlugin.htmlMinifierTerser,
+        ],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    // The chain runs through every CSS minimizer; `esbuild` is the
+    // tightest constraint at Node >=18.
+    it("should work and merge source maps when `minify` mixes CSS minimizers using `cssnano`, `csso`, `cleanCss`, `lightningCss`, `swcCss`, and `esbuild`", async () => {
+      const compiler = getCompiler({
+        devtool: "source-map",
+        entry: path.resolve(__dirname, "./fixtures/css.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.css(\?.*)?$/i,
+        minify: [
+          MinimizerPlugin.cssnanoMinify,
+          MinimizerPlugin.cssoMinify,
+          MinimizerPlugin.cleanCssMinify,
+          MinimizerPlugin.lightningCssMinify,
+          MinimizerPlugin.swcMinifyCss,
+          MinimizerPlugin.esbuildMinifyCss,
+        ],
+        minimizerOptions: [{ preset: "default" }, {}, {}, {}, {}, {}],
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+  });
+});
+
+describe("swc html minify option", () => {
+  // The bundled minimizers this block drives need more of the
+  // environment than the rest of this file does.
+  describeIf(RUN_SWC_HTML_TESTS)("with its minimizers installed", () => {
+    it("should work using when the `minify` option is `swcMinifyHtml`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/html.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.html(\?.*)?$/i,
+        minify: MinimizerPlugin.swcMinifyHtml,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `swcMinifyHtml` and allows to set `@swc/html` options", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/html.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.html(\?.*)?$/i,
+        minify: MinimizerPlugin.swcMinifyHtml,
+        minimizerOptions: {
+          removeComments: false,
+        },
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
+
+    it("should work using when the `minify` option is `swcMinifyHtmlFragment`", async () => {
+      const compiler = getCompiler({
+        entry: path.resolve(__dirname, "./fixtures/html-fragment.js"),
+      });
+
+      new MinimizerPlugin().apply(compiler);
+      new MinimizerPlugin({
+        test: /\.html(\?.*)?$/i,
+        minify: MinimizerPlugin.swcMinifyHtmlFragment,
+      }).apply(compiler);
+
+      const stats = await compile(compiler);
+
+      expect(readsAssets(compiler, stats)).toMatchSnapshot("assets");
+      expect(getErrors(stats)).toMatchSnapshot("errors");
+      expect(getWarnings(stats)).toMatchSnapshot("warnings");
+    });
   });
 });

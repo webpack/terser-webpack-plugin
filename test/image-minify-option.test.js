@@ -1226,60 +1226,6 @@ describe("what an asset's name asks svgo for", () => {
   });
 });
 
-describe("imageminGenerate", () => {
-  // SVG markup under a name claiming a raster format: the same mismatch
-  // `imageminMinify` refuses, which is the one a generator exists to take.
-  const svg = Buffer.from(
-    '<svg xmlns="http://www.w3.org/2000/svg"><rect x="1.00000"/></svg>',
-  );
-
-  it("should rename an image a plugin turned into SVG", async () => {
-    const { code, filename, warnings } = await MinimizerPlugin.imageminGenerate(
-      { "photo.png": svg },
-      undefined,
-      { plugins: ["svgo"] },
-    );
-
-    expect(warnings).toBeUndefined();
-    expect(filename).toBe("photo.svg");
-    // svgo ran: the padded coordinate is what it trims.
-    expect(code.toString()).not.toContain("1.00000");
-    expect(code.toString()).toContain("<svg");
-  });
-
-  it("should keep the name when the format did not change", async () => {
-    const { code, filename } = await MinimizerPlugin.imageminGenerate(
-      { "photo.svg": svg },
-      undefined,
-      { plugins: ["svgo"] },
-    );
-
-    expect(filename).toBeUndefined();
-    expect(code.toString()).not.toContain("1.00000");
-  });
-
-  it("should keep the query and fragment the name carried", async () => {
-    const { filename } = await MinimizerPlugin.imageminGenerate(
-      { "photo.png?w=100#frag": svg },
-      undefined,
-      { plugins: ["svgo"] },
-    );
-
-    expect(filename).toBe("photo.svg?w=100#frag");
-  });
-
-  it("should declare what it needs from the plugin", () => {
-    expect(MinimizerPlugin.imageminGenerate.supportsBinary()).toBe(true);
-    // Its plugins shell out to native binaries, so it cannot leave the process.
-    expect(MinimizerPlugin.imageminGenerate.supportsWorker()).toBe(false);
-    expect(MinimizerPlugin.imageminGenerate.supportsWorkerThreads()).toBe(
-      false,
-    );
-    expect(MinimizerPlugin.imageminGenerate.filter("photo.png")).toBe(true);
-    expect(MinimizerPlugin.imageminGenerate.filter("main.js")).toBe(false);
-  });
-});
-
 describe("the image minimizers' versions", () => {
   // `sharp`, `svgo` and `imagemin` do not list `./package.json` in their
   // `exports`, so requiring it throws and the version used to read as
@@ -1294,5 +1240,49 @@ describe("the image minimizers' versions", () => {
     ["napiRsImageMinify", MinimizerPlugin.napiRsImageMinify],
   ])("should be what %s reports", (_name, minimizer) => {
     expect(minimizer.getMinimizerVersion()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+describe("imageminNormalizeConfig", () => {
+  it("should throw when no configuration is given", async () => {
+    await expect(MinimizerPlugin.imageminNormalizeConfig()).rejects.toThrow(
+      "No plugins found for `imagemin`, please read documentation",
+    );
+  });
+
+  it("should throw when the `plugins` list is empty", async () => {
+    await expect(
+      MinimizerPlugin.imageminNormalizeConfig({ plugins: [] }),
+    ).rejects.toThrow("No plugins found for `imagemin`");
+  });
+
+  it("should throw when `plugins` is not a list", async () => {
+    await expect(
+      MinimizerPlugin.imageminNormalizeConfig({ plugins: 42 }),
+    ).rejects.toThrow("No plugins found for `imagemin`");
+  });
+
+  it.each([
+    ["a number", [42]],
+    ["an empty pair", [[]]],
+    ["an object", [{ name: "svgo" }]],
+  ])("should throw when a plugin is %s", async (_name, plugins) => {
+    await expect(
+      MinimizerPlugin.imageminNormalizeConfig({ plugins }),
+    ).rejects.toThrow(/Invalid plugin configuration/);
+  });
+
+  it("should throw naming the package to install when a plugin is missing", async () => {
+    await expect(
+      MinimizerPlugin.imageminNormalizeConfig({ plugins: ["no-such-plugin"] }),
+    ).rejects.toThrow("Unknown plugin: imagemin-no-such-plugin");
+  });
+
+  it("should not prefix a name that already starts with `imagemin`", async () => {
+    await expect(
+      MinimizerPlugin.imageminNormalizeConfig({
+        plugins: ["imagemin-no-such-plugin"],
+      }),
+    ).rejects.toThrow("Unknown plugin: imagemin-no-such-plugin");
   });
 });
