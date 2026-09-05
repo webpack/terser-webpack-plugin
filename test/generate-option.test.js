@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 
 import MinimizerPlugin from "../src";
-import { replaceExtension } from "../src/utils";
+import { readPreset, replaceExtension } from "../src/utils";
 
 import {
   compile,
@@ -626,6 +626,88 @@ describe("generate presets", () => {
     // Reported rather than guessed at: the asset is left as it was.
     expect(assets).toContain("image.jpg?as=jxl");
     expect(webp.calls).toBe(0);
+  });
+});
+
+describe("preset resolution", () => {
+  // `generate` in module mode needs a webpack that can await `processResult`,
+  // so these branches are unreachable from a build on any released one.
+  it("should read the preset an asset's own name asks for", () => {
+    expect(readPreset("image.jpg?as=webp")).toBe("webp");
+    expect(readPreset("image.jpg?as=webp#fragment")).toBe("webp");
+    expect(readPreset("image.jpg?width=100&as=avif")).toBe("avif");
+    expect(readPreset("image.jpg")).toBeUndefined();
+    expect(readPreset("image.jpg?width=100")).toBeUndefined();
+    expect(readPreset("image.jpg?as=")).toBeUndefined();
+    expect(readPreset("image.jpg#as=webp")).toBeUndefined();
+  });
+
+  /**
+   * @returns {EXPECTED_ANY} something `generatorFor` can push errors onto
+   */
+  const stubCompilation = () => ({ errors: [] });
+
+  it("should return the only generator when none are named", () => {
+    const plugin = new MinimizerPlugin({ generate: toWebp });
+    const compilation = stubCompilation();
+
+    expect(plugin.generatorFor(compilation, "image.jpg").implementation).toBe(
+      toWebp,
+    );
+    expect(compilation.errors).toEqual([]);
+  });
+
+  it("should return the named generator an asset asks for", () => {
+    const plugin = new MinimizerPlugin({ generate: { webp: toWebp } });
+    const compilation = stubCompilation();
+
+    expect(
+      plugin.generatorFor(compilation, "image.jpg?as=webp").implementation,
+    ).toBe(toWebp);
+    expect(compilation.errors).toEqual([]);
+  });
+
+  it("should leave an asset naming no generator alone", () => {
+    const plugin = new MinimizerPlugin({ generate: { webp: toWebp } });
+    const compilation = stubCompilation();
+
+    expect(plugin.generatorFor(compilation, "image.jpg")).toBeUndefined();
+    expect(compilation.errors).toEqual([]);
+  });
+
+  it("should report an asset naming a generator nothing defines", () => {
+    const plugin = new MinimizerPlugin({ generate: { webp: toWebp } });
+    const compilation = stubCompilation();
+
+    expect(
+      plugin.generatorFor(compilation, "image.jpg?as=jxl"),
+    ).toBeUndefined();
+    expect(compilation.errors).toHaveLength(1);
+    expect(compilation.errors[0].message).toMatch(
+      /no 'jxl' preset in `generate`, which defines 'webp'/,
+    );
+  });
+
+  it("should not reach an `asset` generator through `?as=`", () => {
+    const plugin = new MinimizerPlugin({
+      generate: { webp: { implementation: toWebp, type: "asset" } },
+    });
+    const compilation = stubCompilation();
+
+    expect(
+      plugin.generatorFor(compilation, "image.jpg?as=webp"),
+    ).toBeUndefined();
+    expect(compilation.errors).toEqual([]);
+  });
+
+  it("should hand a named generator its own options", () => {
+    const plugin = new MinimizerPlugin({
+      generate: { webp: { implementation: toWebp, options: { tag: "own" } } },
+    });
+
+    expect(
+      plugin.generatorFor(stubCompilation(), "image.jpg?as=webp").options,
+    ).toEqual({ tag: "own" });
   });
 });
 
