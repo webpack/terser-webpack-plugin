@@ -1680,6 +1680,25 @@ describe("minify option written as an object", () => {
     expect(second.saw.tag).toBe("second");
   });
 
+  it("should mix minimizers written both ways in one array", async () => {
+    const plain = recorder();
+    const described = recorder();
+    const compiler = getCompiler();
+
+    new MinimizerPlugin({
+      minify: [plain, { implementation: described }],
+      // Positional, and a descriptor that names no options of its own still
+      // reads the entry at its index.
+      minimizerOptions: [{ tag: "first" }, { tag: "second" }],
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(plain.saw.tag).toBe("first");
+    expect(described.saw.tag).toBe("second");
+  });
+
   it("should still take them from the deprecated `minimizerOptions`", async () => {
     const first = recorder();
     const compiler = getCompiler();
