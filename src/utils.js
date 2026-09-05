@@ -2244,6 +2244,21 @@ function isPresets(generate) {
 }
 
 /**
+ * Whether one named generator was written as an object stating how to run it,
+ * rather than as the generator itself.
+ * @param {EXPECTED_ANY} entry one entry of a `generate` preset object
+ * @returns {boolean} true when it describes a generator
+ */
+function isGeneratorDescriptor(entry) {
+  return (
+    typeof entry === "object" &&
+    entry !== null &&
+    !Array.isArray(entry) &&
+    typeof entry.implementation !== "undefined"
+  );
+}
+
+/**
  * The preset an asset's own name asks for, as `?as=webp`.
  * @param {string} name asset name, query and all
  * @returns {string | undefined} the preset asked for, or undefined
@@ -3435,6 +3450,7 @@ module.exports = {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  isGeneratorDescriptor,
   isPresets,
   jsonMinify,
   lightningCssMinify,

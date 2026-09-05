@@ -577,8 +577,18 @@ type generateFn = (
   warnings?: (Error | string)[];
 }>;
 
+interface generator {
+  implementation: generateFn | generateFn[];
+  type?: "import" | "asset";
+  filename?: string;
+  filter?: (name: string) => boolean;
+  deleteOriginalAssets?: boolean;
+}
+
 type generate =
-  generateFn | generateFn[] | Record<string, generateFn | generateFn[]>;
+  | generateFn
+  | generateFn[]
+  | Record<string, generateFn | generateFn[] | generator>;
 ```
 
 Default: `undefined`
@@ -660,6 +670,46 @@ A module naming no preset is left alone, so the same build can import an image
 unconverted. One naming a preset nothing defines is an error rather than a
 silent decline, since the name it asked for is what the bundle would point at.
 
+A named generator can also be written as an object, which is what lets it read
+what was **emitted** instead of a module as it builds:
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: {
+    webp: {
+      implementation: MinimizerPlugin.sharpGenerate,
+      type: "asset",
+      // Optional. Without it the generator's own name for the result is used,
+      // which for `sharpGenerate` is the original with its extension replaced.
+      filename: "[path][name].webp",
+      // Optional. Narrows what this generator reads, on top of `test`.
+      filter: (name) => !name.includes("icons/"),
+      // Optional, `false` by default: the asset it read stays where it is.
+      deleteOriginalAssets: false,
+    },
+  },
+  generatorOptions: { webp: { encodeOptions: { webp: {} } } },
+});
+```
+
+`type` decides which of the two things a generator does, and they are not
+interchangeable:
+
+- `"import"` (the default) re-encodes a module **as it builds**, so the import
+  that asked for it is renamed with it. That is the only point at which a
+  rename can reach the bundle, and it needs the webpack noted below.
+- `"asset"` writes a **new file beside one already emitted**, which nothing has
+  to import — a `.webp` next to a copied `.png`, say. Nothing points at it, so
+  `?as=` cannot reach it and it runs on any webpack. An asset already generated
+  is never generated from again.
+
+`filename` is a
+[webpack filename template](https://webpack.js.org/configuration/output/#outputfilename)
+resolved against the asset read, so `[path]`, `[name]`, `[base]`, `[ext]` and
+`[query]` are available; content hashes are not, because the name derives from
+one the original already carries.
+
 In watch mode the rename is carried on the module rather than reapplied each
 build, so a rebuild that does not touch the image keeps pointing at the
 generated name without running the generator again. Changing the image does
@@ -679,9 +729,11 @@ removed.
 
 > **Note**
 >
-> `generate` needs a webpack whose `NormalModule` `processResult` hook can be
-> awaited (**5.111** or newer). On an older webpack the plugin reports an error
-> rather than silently generating nothing.
+> An `"import"` generator needs a webpack whose `NormalModule` `processResult`
+> hook can be awaited (**5.111** or newer), since that is where a rename has to
+> happen. On an older webpack the plugin reports an error rather than silently
+> generating nothing. An `"asset"` generator does not use that hook and works on
+> any supported webpack.
 
 ### `generatorOptions`
 

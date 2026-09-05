@@ -337,6 +337,13 @@ export function imageminNormalizeConfig(
   imageminConfig?: EXPECTED_OBJECT | undefined,
 ): Promise<EXPECTED_OBJECT>;
 /**
+ * Whether one named generator was written as an object stating how to run it,
+ * rather than as the generator itself.
+ * @param {EXPECTED_ANY} entry one entry of a `generate` preset object
+ * @returns {boolean} true when it describes a generator
+ */
+export function isGeneratorDescriptor(entry: EXPECTED_ANY): boolean;
+/**
  * Whether `generate` was written as a set of named presets rather than as one
  * generator or a pipeline of them. A function is never a set; an array is a
  * pipeline, which is why only a plain object counts.

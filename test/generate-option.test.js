@@ -5,7 +5,13 @@ import path from "path";
 import MinimizerPlugin from "../src";
 import { replaceExtension } from "../src/utils";
 
-import { compile, getCompiler, getErrors, getWarnings } from "./helpers";
+import {
+  compile,
+  getCompiler,
+  getErrors,
+  getWarnings,
+  readAsset,
+} from "./helpers";
 import { RUN_IMAGE_TESTS } from "./helpers/env";
 
 /**
@@ -620,6 +626,171 @@ describe("generate presets", () => {
     // Reported rather than guessed at: the asset is left as it was.
     expect(assets).toContain("image.jpg?as=jxl");
     expect(webp.calls).toBe(0);
+  });
+});
+
+describe("generate assets", () => {
+  /**
+   * An encoder that reports how often it ran, so a test can tell "declined" from
+   * "ran and produced the same name".
+   * @param {string} tag bytes it prefixes its output with
+   * @param {string} extension extension it re-encodes to
+   * @returns {EXPECTED_ANY} the encoder
+   */
+  function encoderNamed(tag, extension) {
+    /**
+     * @param {{ [file: string]: string | Buffer }} input input
+     * @returns {{ code: Buffer, filename: string }} the re-encoded result
+     */
+    function encode(input) {
+      const [[name, code]] = Object.entries(input);
+
+      encode.calls += 1;
+
+      return {
+        code: Buffer.concat([Buffer.from(`${tag}:`), Buffer.from(code)]),
+        filename: replaceExtension(name, extension),
+      };
+    }
+
+    encode.supportsBinary = () => true;
+    encode.supportsWorker = () => false;
+    encode.calls = 0;
+
+    return encode;
+  }
+
+  /**
+   * @param {object} options plugin options
+   * @returns {Promise<{ stats: import("webpack").Stats, assets: string[] }>} what the build produced
+   */
+  async function build(options) {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/images.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g$/i, ...options }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    return { compiler, stats, assets: Object.keys(stats.compilation.assets) };
+  }
+
+  it("should generate a new asset beside the one it read", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { compiler, stats, assets } = await build({
+      generate: { webp: { implementation: webp, type: "asset" } },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(getWarnings(stats)).toEqual([]);
+    expect(webp.calls).toBe(1);
+    expect(assets).toContain("image.webp");
+    expect(assets).toContain("image.jpg");
+    expect(readAsset("image.webp", compiler, stats).toString()).toMatch(
+      /^WEBP:/,
+    );
+  });
+
+  it("should name the generated asset with `filename` when given one", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { stats, assets } = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          filename: "generated/[name].webp",
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(assets).toContain("generated/image.webp");
+    expect(assets).not.toContain("image.webp");
+  });
+
+  it("should remove the original with `deleteOriginalAssets`", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { stats, assets } = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          deleteOriginalAssets: true,
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(assets).toContain("image.webp");
+    expect(assets).not.toContain("image.jpg");
+  });
+
+  it("should skip an asset its `filter` declines", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { stats, assets } = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          filter: (name) => !name.endsWith(".jpg"),
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(webp.calls).toBe(0);
+    expect(assets).not.toContain("image.webp");
+    expect(assets).toContain("image.jpg");
+  });
+
+  it("should generate every asset generator asked for, from one asset", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const avif = encoderNamed("AVIF", "avif");
+    const { stats, assets } = await build({
+      generate: {
+        webp: { implementation: webp, type: "asset" },
+        avif: { implementation: avif, type: "asset" },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(webp.calls).toBe(1);
+    expect(avif.calls).toBe(1);
+    expect(assets).toContain("image.webp");
+    expect(assets).toContain("image.avif");
+    expect(assets).toContain("image.jpg");
+  });
+
+  it("should not let `?as=` reach an asset generator", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/preset-image.js"),
+      module: {
+        rules: [
+          {
+            test: /\.(png|jpe?g|svg|webp|avif)/i,
+            type: "asset/resource",
+            generator: { filename: "[name][ext][query][fragment]" },
+          },
+        ],
+      },
+    });
+
+    new MinimizerPlugin({
+      test: /\.jpe?g/i,
+      generate: { webp: { implementation: webp, type: "asset" } },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+    const assets = Object.keys(stats.compilation.assets);
+
+    expect(getErrors(stats)).toEqual([]);
+    // The import named the preset, but an `asset` generator reads what was
+    // emitted, so the module keeps its own name and the new file sits beside it.
+    expect(assets).toContain("image.jpg?as=webp");
+    expect(assets).toContain("image.webp?as=webp");
   });
 });
 

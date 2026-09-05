@@ -102,6 +102,20 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private generatorFor;
   /**
+   * Whether any generator rewrites a module as it builds. Only that kind needs
+   * `processResult` to be able to await; an `asset` generator does not.
+   * @private
+   * @returns {boolean} true when one does
+   */
+  private hasModuleGenerator;
+  /**
+   * The named generators that run over emitted assets rather than over a
+   * module as it builds.
+   * @private
+   * @returns {{ name: string, implementation: EXPECTED_ANY, options: EXPECTED_ANY, filename?: string, filter?: (name: string) => boolean, deleteOriginalAssets?: boolean }[]} them, in the order they were written
+   */
+  private assetGenerators;
+  /**
    * Carries the generator's identity into the persistent cache's version.
    * A generator rewrites a module's own build result, which the pack restores
    * without rebuilding, and nothing per-module keys on a plugin.
@@ -110,6 +124,28 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @returns {void}
    */
   private saltCacheVersion;
+  /**
+   * Generate one new asset from one already emitted, leaving the original in
+   * place unless the generator asked for it to go.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {ReturnType<Compilation["getCache"]>} cache the generation cache
+   * @param {Asset} asset the asset to generate from
+   * @param {ReturnType<TerserPlugin["assetGenerators"]>[0]} generator the generator to run
+   * @returns {Promise<void>}
+   */
+  private generateAsset;
+  /**
+   * Generate new assets from the ones already emitted. Where `generate`
+   * rewrites a module's own bytes as it builds, this adds a file beside one
+   * that is already named, so nothing has to import it.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @returns {Promise<void>}
+   */
+  private generateAssets;
   /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
