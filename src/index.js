@@ -15,6 +15,7 @@ const {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  interpolateSize,
   isGeneratorDescriptor,
   isPresets,
   jsonMinify,
@@ -126,6 +127,8 @@ const {
  * @typedef {object} MinimizedResult
  * @property {(string | Buffer)=} code code — a `Buffer` from a minimizer that declares `supportsBinary`
  * @property {string=} filename the name the result should carry, when re-encoding it changed what the bytes are. Only the `generate` path can honour it: an asset is named while its module is built, before anything downstream refers to it
+ * @property {number=} width what the result is now wide, where re-encoding knows it. `[width]` in an `asset` generator's `filename` reads it
+ * @property {number=} height what the result is now tall, where re-encoding knows it
  * @property {RawSourceMap=} map source map
  * @property {(Error | string)[]=} errors errors
  * @property {(Error | string)[]=} warnings warnings
@@ -1350,7 +1353,7 @@ class TerserPlugin {
       cache.getLazyHashedEtag(source),
     );
     let output =
-      /** @type {{ code: Buffer, filename?: string, errors?: (Error | string)[], warnings?: (Error | string)[] } | undefined} */
+      /** @type {{ code: Buffer, filename?: string, width?: number, height?: number, errors?: (Error | string)[], warnings?: (Error | string)[] } | undefined} */
       (await cacheItem.getPromise());
 
     if (!output) {
@@ -1391,6 +1394,8 @@ class TerserPlugin {
               ? generated.code
               : Buffer.from(generated.code),
         filename: generated.filename,
+        width: generated.width,
+        height: generated.height,
         errors: (generated.errors || []).map((item) =>
           TerserPlugin.buildError(
             /** @type {Error | ErrorObject | string} */ (item),
@@ -1414,8 +1419,26 @@ class TerserPlugin {
     }
 
     const generatedName = generator.filename
-      ? compilation.getAssetPath(generator.filename, { filename: name })
+      ? interpolateSize(
+          compilation.getAssetPath(generator.filename, { filename: name }),
+          output,
+        )
       : output.filename || name;
+
+    // A size the generator never reported leaves its placeholder standing, and
+    // a file named `[width]` is worse than a build that says why.
+    if (/\[(width|height)\]/i.test(generatedName)) {
+      compilation.errors.push(
+        TerserPlugin.buildError(
+          new Error(
+            `Error with '${name}': '${generator.filename}' asks for a size this generator does not report.`,
+          ),
+          name,
+        ),
+      );
+
+      return;
+    }
     const generatedSource = new RawSource(output.code);
     // The derived name carries the original's hash, so what the original
     // promised about its own name still holds; its sourcemap does not follow.

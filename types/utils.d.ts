@@ -337,6 +337,21 @@ export function imageminNormalizeConfig(
   imageminConfig?: EXPECTED_OBJECT | undefined,
 ): Promise<EXPECTED_OBJECT>;
 /**
+ * Substitutes `[width]` and `[height]` into a name, which webpack's own
+ * templates do not know. A placeholder no generator reported a size for is
+ * left standing, so the caller can tell it apart from a name it can use.
+ * @param {string} filename a filename template, already otherwise resolved
+ * @param {{ width?: number, height?: number }} size what the generator reported
+ * @returns {string} the name
+ */
+export function interpolateSize(
+  filename: string,
+  size: {
+    width?: number;
+    height?: number;
+  },
+): string;
+/**
  * Whether one named generator was written as an object stating how to run it,
  * rather than as the generator itself.
  * @param {EXPECTED_ANY} entry one entry of a `generate` preset object

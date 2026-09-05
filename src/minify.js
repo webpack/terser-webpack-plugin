@@ -316,6 +316,8 @@ async function minify(options) {
   let lastCode;
   /** @type {string | undefined} */
   let lastFilename;
+  let lastWidth;
+  let lastHeight;
   /** @type {RawSourceMap | undefined} */
   let lastMap;
   /** @type {(Error | string)[]} */
@@ -519,6 +521,16 @@ async function minify(options) {
       lastFilename = result.filename;
     }
 
+    // The size it now has, where the re-encoder knows it. Last answer wins,
+    // as the name does.
+    if (typeof result.width === "number") {
+      lastWidth = result.width;
+    }
+
+    if (typeof result.height === "number") {
+      lastHeight = result.height;
+    }
+
     if (typeof result.code === "string" || Buffer.isBuffer(result.code)) {
       lastCode = result.code;
       // The minimizer's output map is `name → step-output`. Chain it with
@@ -535,6 +547,8 @@ async function minify(options) {
     // Only when one was named: almost nothing re-encodes into another format,
     // and an always-present `filename: undefined` is in every result's shape.
     ...(typeof lastFilename === "string" ? { filename: lastFilename } : {}),
+    ...(typeof lastWidth === "number" ? { width: lastWidth } : {}),
+    ...(typeof lastHeight === "number" ? { height: lastHeight } : {}),
     map: lastMap,
     warnings,
     errors,

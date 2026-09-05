@@ -432,6 +432,14 @@ type MinimizedResult = {
    */
   filename?: string | undefined;
   /**
+   * what the result is now wide, where re-encoding knows it. `[width]` in an `asset` generator's `filename` reads it
+   */
+  width?: number | undefined;
+  /**
+   * what the result is now tall, where re-encoding knows it
+   */
+  height?: number | undefined;
+  /**
    * source map
    */
   map?: RawSourceMap | undefined;

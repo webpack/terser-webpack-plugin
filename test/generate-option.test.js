@@ -648,6 +648,7 @@ describe("generate assets", () => {
       encode.calls += 1;
 
       return {
+        ...encode.reports,
         code: Buffer.concat([Buffer.from(`${tag}:`), Buffer.from(code)]),
         filename: replaceExtension(name, extension),
       };
@@ -656,6 +657,7 @@ describe("generate assets", () => {
     encode.supportsBinary = () => true;
     encode.supportsWorker = () => false;
     encode.calls = 0;
+    encode.reports = {};
 
     return encode;
   }
@@ -708,6 +710,44 @@ describe("generate assets", () => {
     expect(getErrors(stats)).toEqual([]);
     expect(assets).toContain("generated/image.webp");
     expect(assets).not.toContain("image.webp");
+  });
+
+  it("should fill `[width]` and `[height]` from what the generator reports", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+
+    webp.reports = { width: 320, height: 200 };
+
+    const { stats, assets } = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          filename: "[name]-[width]x[height].webp",
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(assets).toContain("image-320x200.webp");
+  });
+
+  it("should error when `filename` asks for a size the generator does not report", async () => {
+    const webp = encoderNamed("WEBP", "webp");
+    const { stats, assets } = await build({
+      generate: {
+        webp: {
+          implementation: webp,
+          type: "asset",
+          filename: "[name]-[width].webp",
+        },
+      },
+    });
+
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(getErrors(stats)[0]).toMatch(
+      /asks for a size this generator does not report/,
+    );
+    expect(assets).not.toContain("image-[width].webp");
   });
 
   it("should remove the original with `deleteOriginalAssets`", async () => {

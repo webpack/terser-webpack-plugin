@@ -2244,6 +2244,22 @@ function isPresets(generate) {
 }
 
 /**
+ * Substitutes `[width]` and `[height]` into a name, which webpack's own
+ * templates do not know. A placeholder no generator reported a size for is
+ * left standing, so the caller can tell it apart from a name it can use.
+ * @param {string} filename a filename template, already otherwise resolved
+ * @param {{ width?: number, height?: number }} size what the generator reported
+ * @returns {string} the name
+ */
+function interpolateSize(filename, size) {
+  return filename.replace(/\[(width|height)\]/gi, (placeholder, key) => {
+    const value = size[/** @type {"width" | "height"} */ (key.toLowerCase())];
+
+    return typeof value === "number" ? String(value) : placeholder;
+  });
+}
+
+/**
  * Whether one named generator was written as an object stating how to run it,
  * rather than as the generator itself.
  * @param {EXPECTED_ANY} entry one entry of a `generate` preset object
@@ -2529,11 +2545,18 @@ async function sharpTransform(input, minimizerOptions, targetFormat) {
     ),
   );
 
-  const encoded = await pipeline.toBuffer();
+  const { data: encoded, info } = await pipeline.toBuffer({
+    resolveWithObject: true,
+  });
+  const size = { width: info.width, height: info.height };
 
   return targetFormat
-    ? { code: encoded, filename: replaceExtension(name, targetFormat) }
-    : { code: encoded };
+    ? {
+        ...size,
+        code: encoded,
+        filename: replaceExtension(name, targetFormat),
+      }
+    : { ...size, code: encoded };
 }
 
 /* istanbul ignore next */
@@ -3450,6 +3473,7 @@ module.exports = {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  interpolateSize,
   isGeneratorDescriptor,
   isPresets,
   jsonMinify,

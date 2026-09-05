@@ -2430,6 +2430,86 @@ module.exports = {
 };
 ```
 
+## Migrating from `image-minimizer-webpack-plugin`
+
+This plugin does what
+[`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)
+did, for every asset type rather than images alone, so one plugin covers a
+build instead of two. The options line up like this:
+
+| `image-minimizer-webpack-plugin`   | here                                                     |
+| ---------------------------------- | -------------------------------------------------------- |
+| `minimizer.implementation`         | [`minify`](#minify)                                      |
+| `minimizer.options`                | [`minimizerOptions`](#minimizeroptions)                  |
+| `minimizer.filter`                 | a `filter` on the minimizer itself                       |
+| `generator[].implementation`       | [`generate`](#generate)                                  |
+| `generator[].options`              | [`generatorOptions`](#generatoroptions), keyed by preset |
+| `generator[].preset`               | the key the generator is written under                   |
+| `generator[].type`                 | `type` on that generator                                 |
+| `generator[].filename` / `.filter` | `filename` / `filter` on that generator                  |
+| `deleteOriginalAssets`             | `deleteOriginalAssets` on that generator                 |
+| `concurrency`                      | [`parallel`](#parallel)                                  |
+| `test` / `include` / `exclude`     | unchanged                                                |
+| `loader`                           | nothing — `generate` reaches a module without one        |
+| `severityError`                    | nothing — a failed minimizer is an error                 |
+
+The minimizers and generators keep their names —
+`imageminMinify`, `imageminGenerate`, `imageminNormalizeConfig`, `sharpMinify`,
+`sharpGenerate`, `svgoMinify` — so only the plugin they are read off changes.
+`squooshMinify` and `squooshGenerate` are not carried over: `@squoosh/lib` is
+unmaintained, and `image-minimizer-webpack-plugin` already marked both
+deprecated.
+
+Two shapes changed rather than moved. Generators are **named** here instead of
+listed, because a name is what `?as=` asks for, so an array of two generators
+becomes an object of two entries. And a generator that produced a file beside
+the original is written with `type: "asset"`, which is the default there and
+not here — without it a generator re-encodes the module itself, which is what
+lets the import be renamed.
+
+**Before**
+
+```js
+const ImageMinimizerPlugin = require("image-minimizer-webpack-plugin");
+
+module.exports = {
+  plugins: [
+    new ImageMinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      generator: [
+        {
+          type: "asset",
+          preset: "webp",
+          implementation: ImageMinimizerPlugin.sharpGenerate,
+          options: { encodeOptions: { webp: { quality: 90 } } },
+        },
+      ],
+    }),
+  ],
+};
+```
+
+**After**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  plugins: [
+    new MinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      generate: {
+        webp: {
+          type: "asset",
+          implementation: MinimizerPlugin.sharpGenerate,
+        },
+      },
+      generatorOptions: { webp: { encodeOptions: { webp: { quality: 90 } } } },
+    }),
+  ],
+};
+```
+
 ## Contributing
 
 We welcome all contributions!
