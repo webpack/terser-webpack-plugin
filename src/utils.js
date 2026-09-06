@@ -2229,6 +2229,112 @@ function bySpelling(parameters) {
 const SHARP_QUERY_PARAMETER_BY_SPELLING = bySpelling(SHARP_QUERY_PARAMETERS);
 
 /**
+ * Whether `generate` was written as a set of named presets rather than as one
+ * generator or a pipeline of them. A function is never a set; an array is a
+ * pipeline, which is why only a plain object counts.
+ * @param {EXPECTED_ANY} generate what `generate` was set to
+ * @returns {boolean} true when it names its generators
+ */
+function isPresets(generate) {
+  return (
+    typeof generate === "object" &&
+    generate !== null &&
+    !Array.isArray(generate)
+  );
+}
+
+/**
+ * Substitutes `[width]` and `[height]` into a name, which webpack's own
+ * templates do not know. A placeholder no generator reported a size for is
+ * left standing, so the caller can tell it apart from a name it can use.
+ * @param {string} filename a filename template, already otherwise resolved
+ * @param {{ width?: number, height?: number }} size what the generator reported
+ * @returns {string} the name
+ */
+function interpolateSize(filename, size) {
+  return filename.replace(/\[(width|height)\]/gi, (placeholder, key) => {
+    const value = size[/** @type {"width" | "height"} */ (key.toLowerCase())];
+
+    return typeof value === "number" ? String(value) : placeholder;
+  });
+}
+
+/**
+ * Whether a minimizer or generator was written as an object stating how to run
+ * it, rather than as the function itself.
+ * @param {EXPECTED_ANY} entry what `minify` or `generate` holds
+ * @returns {boolean} true when it describes one
+ */
+function isDescriptor(entry) {
+  return (
+    typeof entry === "object" &&
+    entry !== null &&
+    !Array.isArray(entry) &&
+    typeof entry.implementation !== "undefined"
+  );
+}
+
+/**
+ * Flattens the objects `minify` may hold into the implementation-and-options
+ * pair the rest of the plugin reads, so a descriptor's own `options` and the
+ * deprecated `minimizerOptions` end up in one place, aligned by position.
+ * @param {EXPECTED_ANY} minify what `minify` was set to
+ * @param {EXPECTED_ANY} declared what `minimizerOptions` says
+ * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
+ */
+function normalizeMinimizers(minify, declared) {
+  // TODO drop the `declared` fallback in the next major release, with the
+  // deprecated `minimizerOptions` it carries.
+  if (Array.isArray(minify)) {
+    if (!minify.some(isDescriptor)) {
+      return { implementation: minify, options: declared };
+    }
+
+    return {
+      implementation: minify.map((one) =>
+        isDescriptor(one) ? one.implementation : one,
+      ),
+      options: minify.map((one, index) =>
+        isDescriptor(one) && typeof one.options !== "undefined"
+          ? one.options
+          : getMinimizerOptionsAt(declared, index),
+      ),
+    };
+  }
+
+  if (isDescriptor(minify)) {
+    return {
+      implementation: minify.implementation,
+      options:
+        typeof minify.options === "undefined" ? declared : minify.options,
+    };
+  }
+
+  return { implementation: minify, options: declared };
+}
+
+/**
+ * The preset an asset's own name asks for, as `?as=webp`.
+ * @param {string} name asset name, query and all
+ * @returns {string | undefined} the preset asked for, or undefined
+ */
+function readPreset(name) {
+  const queryIndex = name.indexOf("?");
+
+  if (queryIndex === -1) {
+    return undefined;
+  }
+
+  const query = name.slice(queryIndex + 1);
+  const fragmentIndex = query.indexOf("#");
+  const asked = new URLSearchParams(
+    fragmentIndex === -1 ? query : query.slice(0, fragmentIndex),
+  ).get("as");
+
+  return asked || undefined;
+}
+
+/**
  * What an asset's name asks a minimizer for, grouped by the argument bag each
  * value belongs in. `output.assetModuleFilename` carries the request's query
  * into the emitted name, so `import banner from "./banner.png?width=320"`
@@ -2478,11 +2584,18 @@ async function sharpTransform(input, minimizerOptions, targetFormat) {
     ),
   );
 
-  const encoded = await pipeline.toBuffer();
+  const { data: encoded, info } = await pipeline.toBuffer({
+    resolveWithObject: true,
+  });
+  const size = { width: info.width, height: info.height };
 
   return targetFormat
-    ? { code: encoded, filename: replaceExtension(name, targetFormat) }
-    : { code: encoded };
+    ? {
+        ...size,
+        code: encoded,
+        filename: replaceExtension(name, targetFormat),
+      }
+    : { ...size, code: encoded };
 }
 
 /* istanbul ignore next */
@@ -3399,12 +3512,17 @@ module.exports = {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  interpolateSize,
+  isDescriptor,
+  isPresets,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  normalizeMinimizers,
   packageVersion,
+  readPreset,
   replaceExtension,
   sharpGenerate,
   sharpMinify,

@@ -1,0 +1,1 @@
+import "./url-image.css";

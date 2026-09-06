@@ -120,7 +120,6 @@ Using supported `devtool` values enable source map generation.
 - **[`minify`](#minify)**
 - **[`minimizerOptions`](#minimizeroptions)**
 - **[`generate`](#generate)**
-- **[`generatorOptions`](#generatoroptions)**
 - **[`extractComments`](#extractcomments)**
 
 ### `test`
@@ -321,7 +320,12 @@ type minifyFn = (
   extractedComments?: string[] | undefined;
 }>;
 
-type minify = minifyFn | minifyFn[];
+interface minimizer {
+  implementation: minifyFn;
+  options?: Record<string, any>;
+}
+
+type minify = minifyFn | (minifyFn | minimizer)[] | minimizer;
 ```
 
 Default: `MinimizerPlugin.terserMinify`
@@ -329,6 +333,20 @@ Default: `MinimizerPlugin.terserMinify`
 Allows you to override the default minify function.
 By default plugin uses [terser](https://github.com/terser/terser) package.
 Useful for using and testing unpublished versions or forks.
+
+A minimizer can be written as an object instead, which is where its own
+options live — one minimizer configured in one place. Several minimizers are
+an array of them, rather than one object holding two lists that have to line
+up:
+
+```js
+new MinimizerPlugin({
+  minify: {
+    implementation: MinimizerPlugin.swcMinify,
+    options: { mangle: false },
+  },
+});
+```
 
 An array of functions can also be provided. Each minimizer can expose a
 `filter(name, info)` helper that decides whether it should run on a given
@@ -353,8 +371,9 @@ new MinimizerPlugin({
 
 When more than one minimizer in the array claims the same asset, the chain
 semantic still applies: the output of each accepting minimizer is fed as
-input to the next. The [`minimizerOptions`](#minimizeroptions) option may
-be an array (index-paired with `minify`) or a single object reused by every
+input to the next. A minimizer written as an object carries its own
+`options`; the deprecated [`minimizerOptions`](#minimizeroptions) may still be
+an array (index-paired with `minify`) or one object reused by every
 minimizer.
 
 The `test` option always defaults to `/\.[cm]?js(\?.*)?$/i`. When you mix
@@ -372,7 +391,7 @@ the dispatcher (for example `test: /\.(?:[cm]?js|css|html?|json)(\?.*)?$/i`).
 ```js
 // Can be async
 const minify = (input, sourceMap, minimizerOptions, extractsComments) => {
-  // The `minimizerOptions` argument contains options from the `minimizerOptions` plugin option
+  // Whatever the `minify` option's `options` holds reaches the third argument
   // You can use `minimizerOptions.myCustomOption`
 
   // Custom logic for extract comments
@@ -415,10 +434,10 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          myCustomOption: true,
+        minify: {
+          implementation: minify,
+          options: { myCustomOption: true },
         },
-        minify,
       }),
     ],
   },
@@ -430,10 +449,9 @@ module.exports = {
 If an array of functions is passed to the `minify` option, each asset is
 dispatched to the minimizers whose `filter` accepts it. When more than one
 minimizer accepts the same asset the output of each is fed as input to the
-next one (the chain semantic). The `minimizerOptions` option can be either an
-array of option objects (index-paired with `minify`) or a single object that
-will be shared by all minimizers. Warnings, errors and extracted comments
-from all running minimizers are merged together.
+next one (the chain semantic). Each entry may be the minimizer itself or an
+object carrying that minimizer's own `options`. Warnings, errors and extracted
+comments from all running minimizers are merged together.
 
 **webpack.config.js**
 
@@ -443,13 +461,12 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: [MinimizerPlugin.terserMinify, MinimizerPlugin.swcMinify],
-        // `minimizerOptions` can be an array of options, one per `minify` entry
-        minimizerOptions: [
-          // Options for `MinimizerPlugin.terserMinify`
-          { mangle: false },
-          // Options for `MinimizerPlugin.swcMinify`
-          {},
+        minify: [
+          {
+            implementation: MinimizerPlugin.terserMinify,
+            options: { mangle: false },
+          },
+          { implementation: MinimizerPlugin.swcMinify },
         ],
       }),
     ],
@@ -511,13 +528,22 @@ type options = minimizerOptions | minimizerOptions[];
 
 Default: [default](https://github.com/terser/terser#minify-options)
 
-Options for the active minimizer. With the default Terser minify, see Terser's
+> **Note**
+>
+> `minimizerOptions` is deprecated in favour of a minimizer's own `options`,
+> which keeps one minimizer's configuration in one place — see
+> [`minify`](#minify). It keeps working, and setting both for the same
+> minimizer is an error. It is still the way to configure the **default**
+> minimizer without naming it.
+
+Options for the active minimizer, whichever of the two places they are given
+in. With the default Terser minify, see Terser's
 [minify options](https://github.com/terser/terser#minify-options).
 
-When the [`minify`](#minify) option is an array of minimizers, `minimizerOptions`
-can also be an array. Each element is passed to the minimizer at the same
-index in the `minify` array. If a single object is provided instead, it is
-reused for every minimizer.
+When the [`minify`](#minify) option is an array of minimizers,
+`minimizerOptions` can also be an array. Each element is passed to the
+minimizer at the same index in the `minify` array. If a single object is
+provided instead, it is reused for every minimizer.
 
 Two keys are filled in before a minimizer sees them, and only when the options
 do not already set them: `ecma`, from
@@ -529,7 +555,8 @@ and `module`, from the asset's own `javascriptModule` info or its `.mjs` /
 >
 > `terserOptions` is kept as a deprecated alias of `minimizerOptions` for
 > backwards compatibility — passing either is equivalent. If both are set,
-> `minimizerOptions` wins. Prefer `minimizerOptions` in new code.
+> `minimizerOptions` wins. Both are on their way out: prefer a minimizer's own
+> `options` in new code.
 
 **webpack.config.js**
 
@@ -539,21 +566,24 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          ecma: undefined,
-          parse: {},
-          compress: {},
-          mangle: true, // Note `mangle.properties` is `false` by default.
-          module: false,
-          // Deprecated
-          output: null,
-          format: null,
-          toplevel: false,
-          nameCache: null,
-          ie8: false,
-          keep_classnames: undefined,
-          keep_fnames: false,
-          safari10: false,
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: {
+            ecma: undefined,
+            parse: {},
+            compress: {},
+            mangle: true, // Note `mangle.properties` is `false` by default.
+            module: false,
+            // Deprecated
+            output: null,
+            format: null,
+            toplevel: false,
+            nameCache: null,
+            ie8: false,
+            keep_classnames: undefined,
+            keep_fnames: false,
+            safari10: false,
+          },
         },
       }),
     ],
@@ -577,7 +607,20 @@ type generateFn = (
   warnings?: (Error | string)[];
 }>;
 
-type generate = generateFn | generateFn[];
+interface generator {
+  implementation: generateFn;
+  options?: Record<string, any>;
+  type?: "import" | "asset";
+  filename?: string;
+  filter?: (name: string) => boolean;
+  deleteOriginalAssets?: boolean;
+}
+
+type generate =
+  | generateFn
+  | generateFn[]
+  | generator
+  | Record<string, generateFn | generateFn[] | generator>;
 ```
 
 Default: `undefined`
@@ -597,8 +640,7 @@ bytes plus the generator and its options.
 
 Two generators ship with the plugin, and they differ in who picks the format.
 `sharpGenerate` is told: it takes the target from the request's `?as=` or,
-failing that, from a [`generatorOptions.encodeOptions`](#generatoroptions)
-naming exactly one format, and reports an error when neither says which format
+failing that, from an `options.encodeOptions` naming exactly one format, and reports an error when neither says which format
 to write. `imageminGenerate` is not: its plugins decide, so it reads the format
 back off the bytes they produced and renames to match, leaving an asset its
 plugins did not convert under the name it had.
@@ -632,6 +674,141 @@ module.exports = {
 import webp from "./image.jpg?as=webp";
 ```
 
+Written as an object, `generate` **names** its generators, and an asset picks
+one by name with `?as=`:
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: {
+    webp: {
+      implementation: MinimizerPlugin.sharpGenerate,
+      options: { encodeOptions: { webp: { quality: 90 } } },
+    },
+    avif: {
+      implementation: MinimizerPlugin.sharpGenerate,
+      options: { encodeOptions: { avif: { quality: 50 } } },
+    },
+  },
+});
+```
+
+```js
+// And `./image.jpg?as=avif` for the other one.
+import webp from "./image.jpg?as=webp";
+```
+
+A module naming no preset is left alone, so the same build can import an image
+unconverted. One naming a preset nothing defines is an error rather than a
+silent decline, since the name it asked for is what the bundle would point at.
+
+A generator can also be written as an object — on its own, or under a name —
+which is where its own options live and what lets it read what was **emitted**
+instead of a module as it builds:
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: {
+    webp: {
+      implementation: MinimizerPlugin.sharpGenerate,
+      options: { encodeOptions: { webp: {} } },
+      type: "asset",
+      // Optional. Without it the generator's own name for the result is used,
+      // which for `sharpGenerate` is the original with its extension replaced.
+      filename: "[path][name].webp",
+      // Optional. Narrows what this generator reads, on top of `test`.
+      filter: (name) => !name.includes("icons/"),
+      // Optional, `false` by default: the asset it read stays where it is.
+      deleteOriginalAssets: false,
+    },
+  },
+});
+```
+
+`type` decides which of the two things a generator does, and they are not
+interchangeable — they read different input, at different points in the build:
+
+|                                | `"import"` (the default)                   | `"asset"`                                               |
+| :----------------------------- | :----------------------------------------- | :------------------------------------------------------ |
+| Reads                          | a module, **as it builds**                 | an asset, **once it is emitted**                        |
+| Produces                       | that module's own bytes, renamed with them | a **new file beside** the one it read                   |
+| Picked by                      | `?as=<name>` on the import                 | `test` / `include` / `exclude`, then `filter`           |
+| Reaches a file nothing imports | no                                         | yes — copied assets included                            |
+| Fields it reads                | `implementation`, `options`                | those plus `filename`, `filter`, `deleteOriginalAssets` |
+| webpack                        | **5.111** or newer                         | any supported version                                   |
+
+**`"import"`** is the only point at which a rename can reach the bundle: the
+asset is named while its module is built, so every reference follows it. The
+import that asked for the conversion gets the converted file.
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: { webp: { implementation: MinimizerPlugin.sharpGenerate } },
+});
+```
+
+```js
+import url from "./photo.jpg?as=webp"; // url is "photo.webp"
+
+const same = new URL("./photo.jpg?as=webp", import.meta.url); // photo.webp
+```
+
+```css
+.hero {
+  background: url("./photo.jpg?as=webp"); /* photo.webp */
+}
+```
+
+```
+photo.webp    the jpg became this
+```
+
+Those are one asset module between them, so an `import`, a `new URL()` and a
+CSS `url()` all follow the rename. An asset inlined as a data URI carries no
+file name, and takes the media type of what it became — `data:image/webp;…`.
+
+**`"asset"`** leaves what it read alone and writes another file next to it, so
+both survive — the `<picture>` case, where the `.webp` goes in a `srcset` you
+write yourself and the `.jpg` stays as the fallback. Nothing imports the new
+file, so `?as=` cannot reach it and its preset name selects nothing; the name
+is only how you address its options. An asset already generated is never
+generated from again.
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: {
+    webp: { implementation: MinimizerPlugin.sharpGenerate, type: "asset" },
+  },
+});
+```
+
+```js
+import url from "./photo.jpg"; // url is "photo.jpg", unchanged
+```
+
+```
+photo.jpg     still there, unless `deleteOriginalAssets`
+photo.webp    generated beside it
+```
+
+`filename`, `filter` and `deleteOriginalAssets` describe a file being written
+beside another, so they belong to `"asset"` and setting one on an `"import"`
+generator is an error rather than a field that quietly does nothing.
+
+`ecma` is filled in from
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
+unless a generator's options set it, the same way it is for a minimizer's —
+see [`minimizerOptions`](#minimizeroptions).
+
+`filename` is a
+[webpack filename template](https://webpack.js.org/configuration/output/#outputfilename)
+resolved against the asset read, so `[path]`, `[name]`, `[base]`, `[ext]` and
+`[query]` are available; content hashes are not, because the name derives from
+one the original already carries.
+
 In watch mode the rename is carried on the module rather than reapplied each
 build, so a rebuild that does not touch the image keeps pointing at the
 generated name without running the generator again. Changing the image does
@@ -640,7 +817,7 @@ run it again, since its answer is cached under the bytes.
 The same holds across runs under
 [`cache.type: "filesystem"`](https://webpack.js.org/configuration/cache/#cachetype),
 where a module is restored from the pack rather than rebuilt. That restored
-result is the generator's, so changing `generate` or `generatorOptions` has to
+result is the generator's, so changing a generator or its options has to
 invalidate the pack, and the plugin adds their identity to
 [`cache.version`](https://webpack.js.org/configuration/cache/#cacheversion) so
 it does. This needs the plugin to be in the config — `plugins` or
@@ -651,45 +828,21 @@ removed.
 
 > **Note**
 >
-> `generate` needs a webpack whose `NormalModule` `processResult` hook can be
-> awaited (**5.111** or newer). On an older webpack the plugin reports an error
-> rather than silently generating nothing.
+> **Note**
+>
+> `generatorOptions` is kept as a deprecated way of giving a generator its
+> options — one object for one generator, an array positionally matching an
+> array of them, or keyed by name where `generate` names its generators. Prefer
+> a generator's own `options`. Setting both for one generator is an error, and
+> a key naming no generator is an error rather than silently doing nothing.
 
-### `generatorOptions`
-
-Type:
-
-```ts
-type generatorOptions = Record<string, any> | Record<string, any>[];
-```
-
-Default: `{}`
-
-Options for [`generate`](#generate), exactly as
-[`minimizerOptions`](#minimizeroptions) is for [`minify`](#minify): one object
-for one generator, or an array positionally matching an array of generators. A
-single object handed an array of generators is reused for every one of them.
-
-`ecma` is filled in from
-[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
-unless the options set it, the same way it is for
-[`minimizerOptions`](#minimizeroptions).
-
-```js
-const MinimizerPlugin = require("minimizer-webpack-plugin");
-
-module.exports = {
-  plugins: [
-    new MinimizerPlugin({
-      test: /\.(jpe?g|png)$/i,
-      generate: MinimizerPlugin.sharpGenerate,
-      // Names the format when the request does not, and carries the encoder's
-      // own settings either way.
-      generatorOptions: { encodeOptions: { webp: { quality: 90 } } },
-    }),
-  ],
-};
-```
+> **Note**
+>
+> An `"import"` generator needs a webpack whose `NormalModule` `processResult`
+> hook can be awaited (**5.111** or newer), since that is where a rename has to
+> happen. On an older webpack the plugin reports an error rather than silently
+> generating nothing. An `"asset"` generator does not use that hook and works on
+> any supported webpack.
 
 ### `extractComments`
 
@@ -741,7 +894,7 @@ By default, extract only comments using `/^\**!|@preserve|@license|@cc_on/i` Reg
 
 If the original file is named `foo.js`, then the comments will be stored to `foo.js.LICENSE.txt`.
 
-The `minimizerOptions.format.comments` option specifies whether the comment will be preserved - i.e., it is possible to preserve some comments (e.g. annotations) while extracting others, or even preserve comments that have already been extracted.
+A minimizer's `options.format.comments` specifies whether the comment will be preserved - i.e., it is possible to preserve some comments (e.g. annotations) while extracting others, or even preserve comments that have already been extracted.
 
 #### `boolean`
 
@@ -1055,10 +1208,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          format: {
-            comments: /@license/i,
-          },
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: { format: { comments: /@license/i } },
         },
         extractComments: true,
       }),
@@ -1079,10 +1231,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          format: {
-            comments: false,
-          },
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: { format: { comments: false } },
         },
         extractComments: false,
       }),
@@ -1103,10 +1254,12 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: MinimizerPlugin.uglifyJsMinify,
-        // `minimizerOptions` will be passed to `uglify-js`
-        // Link to options - https://github.com/mishoo/UglifyJS#minify-options
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.uglifyJsMinify,
+          // `options` will be passed to `uglify-js`
+          // Link to options - https://github.com/mishoo/UglifyJS#minify-options
+          options: {},
+        },
       }),
     ],
   },
@@ -1131,10 +1284,12 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: MinimizerPlugin.swcMinify,
-        // `minimizerOptions` will be passed to `swc` (`@swc/core`)
-        // Link to options - https://swc.rs/docs/config-js-minify
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinify,
+          // `options` will be passed to `swc` (`@swc/core`)
+          // Link to options - https://swc.rs/docs/config-js-minify
+          options: {},
+        },
       }),
     ],
   },
@@ -1157,17 +1312,19 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: MinimizerPlugin.esbuildMinify,
-        // `minimizerOptions` will be passed to `esbuild`
-        // Link to options - https://esbuild.github.io/api/#minify
-        // Note: the `minify` options is true by default (and override other `minify*` options), so if you want to disable the `minifyIdentifiers` option (or other `minify*` options) please use:
-        // minimizerOptions: {
-        //   minify: false,
-        //   minifyWhitespace: true,
-        //   minifyIdentifiers: false,
-        //   minifySyntax: true,
-        // },
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinify,
+          // `options` will be passed to `esbuild`
+          // Link to options - https://esbuild.github.io/api/#minify
+          // Note: the `minify` options is true by default (and override other `minify*` options), so if you want to disable the `minifyIdentifiers` option (or other `minify*` options) please use:
+          // options: {
+          //   minify: false,
+          //   minifyWhitespace: true,
+          //   minifyIdentifiers: false,
+          //   minifySyntax: true,
+          // },
+          options: {},
+        },
       }),
     ],
   },
@@ -1190,9 +1347,11 @@ module.exports = {
       // Will minify JSON files (they can come from copy-webpack-plugin or when you are using asset modules)
       new MinimizerPlugin({
         test: /\.json$/,
-        minify: MinimizerPlugin.jsonMinify,
-        // We are supporting `space` and `replacer` options, you can set them below
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.jsonMinify,
+          // We are supporting `space` and `replacer` options, you can set them below
+          options: {},
+        },
       }),
     ],
   },
@@ -1255,11 +1414,13 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.htmlMinifierTerser,
-        // Options - https://github.com/terser/html-minifier-terser#options-quick-reference
-        minimizerOptions: {
-          collapseWhitespace: true,
-          removeComments: true,
+        minify: {
+          implementation: MinimizerPlugin.htmlMinifierTerser,
+          // Options - https://github.com/terser/html-minifier-terser#options-quick-reference
+          options: {
+            collapseWhitespace: true,
+            removeComments: true,
+          },
         },
       }),
     ],
@@ -1283,9 +1444,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyHtml,
-        // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtml,
+          // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
+          options: {},
+        },
       }),
     ],
   },
@@ -1308,9 +1471,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.template\.html$/i,
-        minify: MinimizerPlugin.swcMinifyHtmlFragment,
-        // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtmlFragment,
+          // Options - https://github.com/swc-project/bindings/blob/main/packages/html/index.ts
+          options: {},
+        },
       }),
     ],
   },
@@ -1338,9 +1503,11 @@ module.exports = {
       "...",
       new Minimizer({
         test: /\.html(\?.*)?$/i,
-        minify: Minimizer.minifyHtmlNode,
-        // Options - https://github.com/wilsonzlin/minify-html#minification
-        minimizerOptions: {},
+        minify: {
+          implementation: Minimizer.minifyHtmlNode,
+          // Options - https://github.com/wilsonzlin/minify-html#minification
+          options: {},
+        },
       }),
     ],
   },
@@ -1404,10 +1571,12 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssnanoMinify,
-        // Options - https://cssnano.github.io/cssnano/docs/config-file/
-        minimizerOptions: {
-          preset: "default",
+        minify: {
+          implementation: MinimizerPlugin.cssnanoMinify,
+          // Options - https://cssnano.github.io/cssnano/docs/config-file/
+          options: {
+            preset: "default",
+          },
         },
       }),
     ],
@@ -1431,9 +1600,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssoMinify,
-        // Options - https://github.com/css/csso#minifysource-options
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.cssoMinify,
+          // Options - https://github.com/css/csso#minifysource-options
+          options: {},
+        },
       }),
     ],
   },
@@ -1456,9 +1627,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cleanCssMinify,
-        // Options - https://github.com/clean-css/clean-css#constructor-options
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.cleanCssMinify,
+          // Options - https://github.com/clean-css/clean-css#constructor-options
+          options: {},
+        },
       }),
     ],
   },
@@ -1481,9 +1654,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.esbuildMinifyCss,
-        // Options - https://esbuild.github.io/api/#transform-api
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinifyCss,
+          // Options - https://esbuild.github.io/api/#transform-api
+          options: {},
+        },
       }),
     ],
   },
@@ -1506,9 +1681,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.lightningCssMinify,
-        // Options - https://lightningcss.dev/transpilation.html
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.lightningCssMinify,
+          // Options - https://lightningcss.dev/transpilation.html
+          options: {},
+        },
       }),
     ],
   },
@@ -1531,9 +1708,11 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyCss,
-        // Options - https://github.com/swc-project/bindings/blob/main/packages/css/index.ts
-        minimizerOptions: {},
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyCss,
+          // Options - https://github.com/swc-project/bindings/blob/main/packages/css/index.ts
+          options: {},
+        },
       }),
     ],
   },
@@ -1562,13 +1741,11 @@ module.exports = {
       new MinimizerPlugin({
         test: /\.(?:[cm]?js|css|html|json)(\?.*)?$/i,
         minify: [
-          MinimizerPlugin.terserMinify,
-          cssMinify,
-          htmlMinify,
-          MinimizerPlugin.jsonMinify,
+          { implementation: MinimizerPlugin.terserMinify },
+          { implementation: cssMinify },
+          { implementation: htmlMinify },
+          { implementation: MinimizerPlugin.jsonMinify },
         ],
-        // Positional: one entry per `minify` entry, in the same order.
-        minimizerOptions: [{}, {}, {}, {}],
       }),
     ],
   },
@@ -1586,7 +1763,7 @@ through their own `filter`, and both run in the worker pool.
 | `filter`                  | `/\.css(\?.*)?$/i`                         | `/\.html(\?.*)?$/i`                        |
 | `supportsWorkerThreads()` | `true`                                     | `true`                                     |
 
-`minimizerOptions` is `optimization.minimize.css` and
+Their `options` are `optimization.minimize.css` and
 `optimization.minimize.html` respectively. `environment` carries what the
 target can read (`{ browsers, vendorPrefixes }`, the CSS entries of
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)),
@@ -1669,7 +1846,7 @@ inline agree about the target:
 ```js
 const environment = { browsers: ["chrome 100", "safari 15"] };
 
-const minimizerOptions = [
+const options = [
   {},
   // cssMinify
   { environment, convertLengthUnits: true },
@@ -1784,15 +1961,17 @@ off.
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
-  minify: MinimizerPlugin.sharpMinify,
-  minimizerOptions: {
-    encodeOptions: {
-      // https://sharp.pixelplumbing.com/api-output
-      jpeg: { quality: 100 },
-      webp: { lossless: true },
-      avif: { lossless: true },
-      // PNG is already lossless at sharp's defaults
-      png: {},
+  minify: {
+    implementation: MinimizerPlugin.sharpMinify,
+    options: {
+      encodeOptions: {
+        // https://sharp.pixelplumbing.com/api-output
+        jpeg: { quality: 100 },
+        webp: { lossless: true },
+        avif: { lossless: true },
+        // PNG is already lossless at sharp's defaults
+        png: {},
+      },
     },
   },
 });
@@ -1803,14 +1982,16 @@ new MinimizerPlugin({
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g|webp|avif)(\?.*)?$/i,
-  minify: MinimizerPlugin.napiRsImageMinify,
-  minimizerOptions: {
-    encodeOptions: {
-      // Anything below 100 re-encodes rather than repacking
-      jpeg: { quality: 80 },
-      webp: { quality: 80 },
-      avif: { quality: 70 },
-      // `png` has no quality setting — it is lossless either way
+  minify: {
+    implementation: MinimizerPlugin.napiRsImageMinify,
+    options: {
+      encodeOptions: {
+        // Anything below 100 re-encodes rather than repacking
+        jpeg: { quality: 80 },
+        webp: { quality: 80 },
+        avif: { quality: 70 },
+        // `png` has no quality setting — it is lossless either way
+      },
     },
   },
 });
@@ -1841,14 +2022,16 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.(png|jpe?g|webp|avif|tiff?|gif)$/i,
-        minify: MinimizerPlugin.sharpMinify,
-        minimizerOptions: {
-          // Options are keyed by sharp's format name
-          // https://sharp.pixelplumbing.com/api-output
-          encodeOptions: {
-            jpeg: { quality: 80 },
-            png: { compressionLevel: 9 },
-            webp: { lossless: true },
+        minify: {
+          implementation: MinimizerPlugin.sharpMinify,
+          options: {
+            // Options are keyed by sharp's format name
+            // https://sharp.pixelplumbing.com/api-output
+            encodeOptions: {
+              jpeg: { quality: 80 },
+              png: { compressionLevel: 9 },
+              webp: { lossless: true },
+            },
           },
         },
       }),
@@ -1862,21 +2045,23 @@ module.exports = {
 ```js
 new MinimizerPlugin({
   test: /\.(png|jpe?g)$/i,
-  minify: MinimizerPlugin.sharpMinify,
-  minimizerOptions: {
-    // `enabled` and `unit` ("px" by default, or "percent") are read here;
-    // everything else goes to sharp
-    // https://sharp.pixelplumbing.com/api-resize
-    resize: { width: 800, unit: "px", fit: "inside" },
-    // A number of degrees, or "auto" to follow the EXIF orientation
-    rotate: "auto",
-    flip: false,
-    flop: false,
-    grayscale: false,
-    // A sigma, or true for a fast default
-    blur: false,
-    sharpen: false,
-    encodeOptions: { jpeg: { quality: 80 } },
+  minify: {
+    implementation: MinimizerPlugin.sharpMinify,
+    options: {
+      // `enabled` and `unit` ("px" by default, or "percent") are read here;
+      // everything else goes to sharp
+      // https://sharp.pixelplumbing.com/api-resize
+      resize: { width: 800, unit: "px", fit: "inside" },
+      // A number of degrees, or "auto" to follow the EXIF orientation
+      rotate: "auto",
+      flip: false,
+      flop: false,
+      grayscale: false,
+      // A sigma, or true for a fast default
+      blur: false,
+      sharpen: false,
+      encodeOptions: { jpeg: { quality: 80 } },
+    },
   },
 });
 ```
@@ -1903,12 +2088,14 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.svg(\?.*)?$/i,
-        minify: MinimizerPlugin.svgoMinify,
-        minimizerOptions: {
-          // Options - https://github.com/svg/svgo#configuration
-          encodeOptions: {
-            multipass: true,
-            plugins: ["preset-default"],
+        minify: {
+          implementation: MinimizerPlugin.svgoMinify,
+          options: {
+            // Options - https://github.com/svg/svgo#configuration
+            encodeOptions: {
+              multipass: true,
+              plugins: ["preset-default"],
+            },
           },
         },
       }),
@@ -1935,14 +2122,16 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.(png|jpe?g|gif|svg)$/i,
-        minify: MinimizerPlugin.imageminMinify,
-        minimizerOptions: {
-          plugins: [
-            "gifsicle",
-            "mozjpeg",
-            ["pngquant", { quality: [0.6, 0.8] }],
-            "svgo",
-          ],
+        minify: {
+          implementation: MinimizerPlugin.imageminMinify,
+          options: {
+            plugins: [
+              "gifsicle",
+              "mozjpeg",
+              ["pngquant", { quality: [0.6, 0.8] }],
+              "svgo",
+            ],
+          },
         },
       }),
     ],
@@ -1984,19 +2173,21 @@ module.exports = {
       "...",
       new MinimizerPlugin({
         test: /\.(png|jpe?g|webp|avif)$/i,
-        minify: MinimizerPlugin.napiRsImageMinify,
-        minimizerOptions: {
-          // Options are keyed by the format's own name
-          // https://github.com/Brooooooklyn/Image#usage
-          encodeOptions: {
-            // `PNGLosslessOptions`
-            png: { force: true },
-            // `JpegCompressOptions`
-            jpeg: { quality: 80 },
-            // `AvifConfig`
-            avif: { quality: 70, speed: 4 },
-            // The quality factor, 0-100
-            webp: { quality: 80 },
+        minify: {
+          implementation: MinimizerPlugin.napiRsImageMinify,
+          options: {
+            // Options are keyed by the format's own name
+            // https://github.com/Brooooooklyn/Image#usage
+            encodeOptions: {
+              // `PNGLosslessOptions`
+              png: { force: true },
+              // `JpegCompressOptions`
+              jpeg: { quality: 80 },
+              // `AvifConfig`
+              avif: { quality: 70, speed: 4 },
+              // The quality factor, 0-100
+              webp: { quality: 80 },
+            },
           },
         },
       }),
@@ -2066,10 +2257,10 @@ import banner from "./banner.png?width=320&quality=80";
 
 A **flag** is on when it is present — `?flip` — and reads `true`/`1`/`yes` the
 same way, `false`/`0`/`no` the other. `greyscale` and `grey` spell `grayscale`,
-`auto` on `width` or `height` drops one set in `minimizerOptions`, and a
+`auto` on `width` or `height` drops one set in the minimizer's `options`, and a
 parameter can be spelled in any case.
 
-Every one of these can also be set in `minimizerOptions`; the name wins where
+Every one of these can also be set in the minimizer's `options`; the name wins where
 both say something, being the more specific of the two. `resize: { enabled:
 false }` still turns resizing off entirely.
 
@@ -2162,17 +2353,13 @@ module.exports = {
       new MinimizerPlugin({
         test: /\.(js|css|svg|png|jpe?g)$/i,
         minify: [
-          MinimizerPlugin.terserMinify,
-          MinimizerPlugin.cssnanoMinify,
-          MinimizerPlugin.svgoMinify,
-          MinimizerPlugin.sharpMinify,
-        ],
-        // One entry per minimizer, in the same order
-        minimizerOptions: [
-          {},
-          {},
-          {},
-          { encodeOptions: { png: { compressionLevel: 9 } } },
+          { implementation: MinimizerPlugin.terserMinify },
+          { implementation: MinimizerPlugin.cssnanoMinify },
+          { implementation: MinimizerPlugin.svgoMinify },
+          {
+            implementation: MinimizerPlugin.sharpMinify,
+            options: { encodeOptions: { png: { compressionLevel: 9 } } },
+          },
         ],
       }),
     ],
@@ -2220,8 +2407,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          compress: true,
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: { compress: true },
         },
       }),
     ],
@@ -2252,100 +2440,206 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin<SwcOptions>({
-        minify: MinimizerPlugin.swcMinify,
-        minimizerOptions: {
-          // `swc` options
+        minify: {
+          implementation: MinimizerPlugin.swcMinify,
+          options: {
+            // `swc` options
+          },
         },
       }),
       new MinimizerPlugin<UglifyJSOptions>({
-        minify: MinimizerPlugin.uglifyJsMinify,
-        minimizerOptions: {
-          // `uglif-js` options
+        minify: {
+          implementation: MinimizerPlugin.uglifyJsMinify,
+          options: {
+            // `uglif-js` options
+          },
         },
       }),
       new MinimizerPlugin<EsbuildOptions>({
-        minify: MinimizerPlugin.esbuildMinify,
-        minimizerOptions: {
-          // `esbuild` options
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinify,
+          options: {
+            // `esbuild` options
+          },
         },
       }),
 
       // Alternative usage:
       new MinimizerPlugin<TerserOptions>({
-        minify: MinimizerPlugin.terserMinify,
-        minimizerOptions: {
-          // `terser` options
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: {
+            // `terser` options
+          },
         },
       }),
 
       // HTML minimizers
       new MinimizerPlugin<HtmlMinifierTerserOptions>({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.htmlMinifierTerser,
-        minimizerOptions: {
-          // `html-minifier-terser` options
+        minify: {
+          implementation: MinimizerPlugin.htmlMinifierTerser,
+          options: {
+            // `html-minifier-terser` options
+          },
         },
       }),
       new MinimizerPlugin<SwcHtmlOptions>({
         test: /\.html(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyHtml,
-        minimizerOptions: {
-          // `@swc/html` options
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtml,
+          options: {
+            // `@swc/html` options
+          },
         },
       }),
       new MinimizerPlugin<SwcHtmlFragmentOptions>({
         test: /\.template\.html$/i,
-        minify: MinimizerPlugin.swcMinifyHtmlFragment,
-        minimizerOptions: {
-          // `@swc/html` fragment options
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyHtmlFragment,
+          options: {
+            // `@swc/html` fragment options
+          },
         },
       }),
 
       // CSS minimizers
       new MinimizerPlugin<CssnanoOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssnanoMinify,
-        minimizerOptions: {
-          // `cssnano` options
+        minify: {
+          implementation: MinimizerPlugin.cssnanoMinify,
+          options: {
+            // `cssnano` options
+          },
         },
       }),
       new MinimizerPlugin<CssoOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cssoMinify,
-        minimizerOptions: {
-          // `csso` options
+        minify: {
+          implementation: MinimizerPlugin.cssoMinify,
+          options: {
+            // `csso` options
+          },
         },
       }),
       new MinimizerPlugin<CleanCssOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.cleanCssMinify,
-        minimizerOptions: {
-          // `clean-css` options
+        minify: {
+          implementation: MinimizerPlugin.cleanCssMinify,
+          options: {
+            // `clean-css` options
+          },
         },
       }),
       new MinimizerPlugin<EsbuildOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.esbuildMinifyCss,
-        minimizerOptions: {
-          // `esbuild` options (CSS loader)
+        minify: {
+          implementation: MinimizerPlugin.esbuildMinifyCss,
+          options: {
+            // `esbuild` options (CSS loader)
+          },
         },
       }),
       new MinimizerPlugin<LightningCssOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.lightningCssMinify,
-        minimizerOptions: {
-          // `lightningcss` options
+        minify: {
+          implementation: MinimizerPlugin.lightningCssMinify,
+          options: {
+            // `lightningcss` options
+          },
         },
       }),
       new MinimizerPlugin<SwcCssOptions>({
         test: /\.css(\?.*)?$/i,
-        minify: MinimizerPlugin.swcMinifyCss,
-        minimizerOptions: {
-          // `@swc/css` options
+        minify: {
+          implementation: MinimizerPlugin.swcMinifyCss,
+          options: {
+            // `@swc/css` options
+          },
         },
       }),
     ],
   },
+};
+```
+
+## Migrating from `image-minimizer-webpack-plugin`
+
+This plugin does what
+[`image-minimizer-webpack-plugin`](https://github.com/webpack/image-minimizer-webpack-plugin)
+did, for every asset type rather than images alone, so one plugin covers a
+build instead of two. The options line up like this:
+
+| `image-minimizer-webpack-plugin`   | here                                              |
+| ---------------------------------- | ------------------------------------------------- |
+| `minimizer.implementation`         | [`minify`](#minify)                               |
+| `minimizer.options`                | `options` on that minimizer                       |
+| `minimizer.filter`                 | a `filter` on the minimizer itself                |
+| `generator[].implementation`       | [`generate`](#generate)                           |
+| `generator[].options`              | `options` on that generator                       |
+| `generator[].preset`               | the key the generator is written under            |
+| `generator[].type`                 | `type` on that generator                          |
+| `generator[].filename` / `.filter` | `filename` / `filter` on that generator           |
+| `deleteOriginalAssets`             | `deleteOriginalAssets` on that generator          |
+| `concurrency`                      | [`parallel`](#parallel)                           |
+| `test` / `include` / `exclude`     | unchanged                                         |
+| `loader`                           | nothing — `generate` reaches a module without one |
+| `severityError`                    | nothing — a failed minimizer is an error          |
+
+The minimizers and generators keep their names —
+`imageminMinify`, `imageminGenerate`, `imageminNormalizeConfig`, `sharpMinify`,
+`sharpGenerate`, `svgoMinify` — so only the plugin they are read off changes.
+`squooshMinify` and `squooshGenerate` are not carried over: `@squoosh/lib` is
+unmaintained, and `image-minimizer-webpack-plugin` already marked both
+deprecated.
+
+Two shapes changed rather than moved. Generators are **named** here instead of
+listed, because a name is what `?as=` asks for, so an array of two generators
+becomes an object of two entries. And a generator that produced a file beside
+the original is written with `type: "asset"`, which is the default there and
+not here — without it a generator re-encodes the module itself, which is what
+lets the import be renamed.
+
+**Before**
+
+```js
+const ImageMinimizerPlugin = require("image-minimizer-webpack-plugin");
+
+module.exports = {
+  plugins: [
+    new ImageMinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      generator: [
+        {
+          type: "asset",
+          preset: "webp",
+          implementation: ImageMinimizerPlugin.sharpGenerate,
+          options: { encodeOptions: { webp: { quality: 90 } } },
+        },
+      ],
+    }),
+  ],
+};
+```
+
+**After**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  plugins: [
+    new MinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      generate: {
+        webp: {
+          type: "asset",
+          implementation: MinimizerPlugin.sharpGenerate,
+          options: { encodeOptions: { webp: { quality: 90 } } },
+        },
+      },
+    }),
+  ],
 };
 ```
 

@@ -337,6 +337,36 @@ export function imageminNormalizeConfig(
   imageminConfig?: EXPECTED_OBJECT | undefined,
 ): Promise<EXPECTED_OBJECT>;
 /**
+ * Substitutes `[width]` and `[height]` into a name, which webpack's own
+ * templates do not know. A placeholder no generator reported a size for is
+ * left standing, so the caller can tell it apart from a name it can use.
+ * @param {string} filename a filename template, already otherwise resolved
+ * @param {{ width?: number, height?: number }} size what the generator reported
+ * @returns {string} the name
+ */
+export function interpolateSize(
+  filename: string,
+  size: {
+    width?: number;
+    height?: number;
+  },
+): string;
+/**
+ * Whether a minimizer or generator was written as an object stating how to run
+ * it, rather than as the function itself.
+ * @param {EXPECTED_ANY} entry what `minify` or `generate` holds
+ * @returns {boolean} true when it describes one
+ */
+export function isDescriptor(entry: EXPECTED_ANY): boolean;
+/**
+ * Whether `generate` was written as a set of named presets rather than as one
+ * generator or a pipeline of them. A function is never a set; an array is a
+ * pipeline, which is why only a plain object counts.
+ * @param {EXPECTED_ANY} generate what `generate` was set to
+ * @returns {boolean} true when it names its generators
+ */
+export function isPresets(generate: EXPECTED_ANY): boolean;
+/**
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map
  * @param {CustomOptions=} minimizerOptions options
@@ -479,6 +509,21 @@ export namespace napiRsImageMinify {
   function filter(name: string): boolean;
 }
 /**
+ * Flattens the objects `minify` may hold into the implementation-and-options
+ * pair the rest of the plugin reads, so a descriptor's own `options` and the
+ * deprecated `minimizerOptions` end up in one place, aligned by position.
+ * @param {EXPECTED_ANY} minify what `minify` was set to
+ * @param {EXPECTED_ANY} declared what `minimizerOptions` says
+ * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
+ */
+export function normalizeMinimizers(
+  minify: EXPECTED_ANY,
+  declared: EXPECTED_ANY,
+): {
+  implementation: EXPECTED_ANY;
+  options: EXPECTED_ANY;
+};
+/**
  * The version a package reports. Read by walking up from its resolved entry
  * point rather than by requiring `<name>/package.json`, which a package whose
  * `exports` does not list that path — `sharp`, `svgo` and `imagemin` among them
@@ -488,6 +533,12 @@ export namespace napiRsImageMinify {
  * @returns {string | undefined} its version, or undefined when it is not installed
  */
 export function packageVersion(name: string): string | undefined;
+/**
+ * The preset an asset's own name asks for, as `?as=webp`.
+ * @param {string} name asset name, query and all
+ * @returns {string | undefined} the preset asked for, or undefined
+ */
+export function readPreset(name: string): string | undefined;
 /**
  * Replace a name's extension, keeping any query and fragment: the request that
  * asked for the conversion is still part of what the asset is named after.

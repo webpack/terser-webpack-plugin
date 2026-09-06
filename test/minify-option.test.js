@@ -1621,3 +1621,128 @@ describe("getMinimizerVersion", () => {
     },
   );
 });
+
+describe("minify option written as an object", () => {
+  /**
+   * @returns {EXPECTED_ANY} a minimizer that records the options it was handed
+   */
+  function recorder() {
+    /**
+     * @param {{ [file: string]: string }} input input
+     * @param {undefined} sourceMap source map
+     * @param {{ tag?: string }} minimizerOptions the options it was handed
+     * @returns {{ code: string }} the minified result
+     */
+    function minimize(input, sourceMap, minimizerOptions) {
+      const [[, code]] = Object.entries(input);
+
+      minimize.saw = minimizerOptions;
+
+      return { code };
+    }
+
+    minimize.supportsWorker = () => false;
+    minimize.saw = undefined;
+
+    return minimize;
+  }
+
+  it("should take a minimizer's options from `minify` itself", async () => {
+    const first = recorder();
+    const compiler = getCompiler();
+
+    new MinimizerPlugin({
+      minify: { implementation: first, options: { tag: "from-minify" } },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(first.saw.tag).toBe("from-minify");
+  });
+
+  it("should give each minimizer in an array its own options", async () => {
+    const first = recorder();
+    const second = recorder();
+    const compiler = getCompiler();
+
+    new MinimizerPlugin({
+      minify: [
+        { implementation: first, options: { tag: "first" } },
+        { implementation: second, options: { tag: "second" } },
+      ],
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(first.saw.tag).toBe("first");
+    expect(second.saw.tag).toBe("second");
+  });
+
+  it("should mix minimizers written both ways in one array", async () => {
+    const plain = recorder();
+    const described = recorder();
+    const compiler = getCompiler();
+
+    new MinimizerPlugin({
+      minify: [plain, { implementation: described }],
+      // Positional, and a descriptor that names no options of its own still
+      // reads the entry at its index.
+      minimizerOptions: [{ tag: "first" }, { tag: "second" }],
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(plain.saw.tag).toBe("first");
+    expect(described.saw.tag).toBe("second");
+  });
+
+  it("should still take them from the deprecated `minimizerOptions`", async () => {
+    const first = recorder();
+    const compiler = getCompiler();
+
+    new MinimizerPlugin({
+      minify: { implementation: first },
+      minimizerOptions: { tag: "from-minimizer-options" },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(first.saw.tag).toBe("from-minimizer-options");
+  });
+
+  it("should reject a minimizer written as an object holding several", () => {
+    const first = recorder();
+    const second = recorder();
+
+    expect(() =>
+      getCompiler({
+        plugins: [
+          new MinimizerPlugin({
+            // Several minimizers are an array of objects, not one object
+            // holding two lists that have to line up.
+            minify: { implementation: [first, second] },
+          }),
+        ],
+      }),
+    ).toThrow(/should be an instance of function/);
+  });
+
+  it("should reject options given in both places for one minimizer", () => {
+    const first = recorder();
+
+    expect(() =>
+      getCompiler({
+        plugins: [
+          new MinimizerPlugin({
+            minify: { implementation: first, options: { tag: "a" } },
+            minimizerOptions: { tag: "b" },
+          }),
+        ],
+      }),
+    ).toThrow(/`minify` sets its own `options`/);
+  });
+});

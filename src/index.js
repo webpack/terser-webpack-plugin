@@ -15,11 +15,16 @@ const {
   imageminGenerate,
   imageminMinify,
   imageminNormalizeConfig,
+  interpolateSize,
+  isDescriptor,
+  isPresets,
   jsonMinify,
   lightningCssMinify,
   memoize,
   minifyHtmlNode,
   napiRsImageMinify,
+  normalizeMinimizers,
+  readPreset,
   sharpGenerate,
   sharpMinify,
   svgoMinify,
@@ -123,6 +128,8 @@ const {
  * @typedef {object} MinimizedResult
  * @property {(string | Buffer)=} code code — a `Buffer` from a minimizer that declares `supportsBinary`
  * @property {string=} filename the name the result should carry, when re-encoding it changed what the bytes are. Only the `generate` path can honour it: an asset is named while its module is built, before anything downstream refers to it
+ * @property {number=} width what the result is now wide, where re-encoding knows it. `[width]` in an `asset` generator's `filename` reads it
+ * @property {number=} height what the result is now tall, where re-encoding knows it
  * @property {RawSourceMap=} map source map
  * @property {(Error | string)[]=} errors errors
  * @property {(Error | string)[]=} warnings warnings
@@ -279,10 +286,9 @@ class TerserPlugin {
       parallel,
       include,
       exclude,
-      minimizer: {
-        implementation: minify,
-        options: resolvedMinimizerOptions,
-      },
+      minimizer:
+        /** @type {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} */
+        (normalizeMinimizers(minify, resolvedMinimizerOptions)),
       // Absent unless asked for: it runs while modules build, where the plugin
       // otherwise does nothing.
       generator: generate
@@ -1131,6 +1137,138 @@ class TerserPlugin {
   }
 
   /**
+   * One generator, however it was written: as the generator itself or as an
+   * object stating how to run it.
+   * @private
+   * @param {string | undefined} name the preset it is written under, where it has one
+   * @param {EXPECTED_ANY} entry what was written there
+   * @param {EXPECTED_ANY} declared what `generatorOptions` says for it
+   * @returns {{ name: string | undefined, implementation: EXPECTED_ANY, options: EXPECTED_ANY, type: string | undefined, filename: string | undefined, filter: ((name: string) => boolean) | undefined, deleteOriginalAssets: boolean | undefined }} the generator
+   */
+  describeGenerator(name, entry, declared) {
+    const descriptor = isDescriptor(entry) ? entry : undefined;
+    const own = descriptor ? descriptor.options : undefined;
+
+    return {
+      name,
+      implementation: descriptor ? descriptor.implementation : entry,
+      // TODO remove the `generatorOptions` fallback in the next major release,
+      // where a generator's options are its own.
+      options: (typeof own === "undefined" ? declared : own) || {},
+      type: descriptor ? descriptor.type : undefined,
+      filename: descriptor ? descriptor.filename : undefined,
+      filter: descriptor ? descriptor.filter : undefined,
+      deleteOriginalAssets: descriptor
+        ? descriptor.deleteOriginalAssets
+        : undefined,
+    };
+  }
+
+  /**
+   * Every generator `generate` holds, whichever shape it was written in.
+   * @private
+   * @returns {ReturnType<TerserPlugin["describeGenerator"]>[]} them, in the order they were written
+   */
+  generators() {
+    const { generator } = this.options;
+
+    if (!generator) {
+      return [];
+    }
+
+    const written = generator.implementation;
+    const declared = generator.options;
+
+    if (!isPresets(written) || isDescriptor(written)) {
+      return [this.describeGenerator(undefined, written, declared)];
+    }
+
+    const presets =
+      /** @type {{ [preset: string]: EXPECTED_ANY }} */
+      (/** @type {unknown} */ (written));
+    const perPreset =
+      /** @type {{ [preset: string]: EXPECTED_ANY }} */
+      (declared || {});
+
+    return Object.keys(presets).map((preset) =>
+      this.describeGenerator(preset, presets[preset], perPreset[preset]),
+    );
+  }
+
+  /**
+   * The generator a module asks for by name, or the only one there is.
+   *
+   * A `generate` naming its generators is picked between by `?as=`: a module
+   * that names none is left alone, and one that names a generator nothing
+   * defines is an error rather than a silent decline.
+   * @private
+   * @param {Compilation} compilation compilation
+   * @param {string} resource the module's resource, query and all
+   * @returns {{ implementation: MinimizerImplementation<EXPECTED_ANY>, options: MinimizerOptions<EXPECTED_ANY> } | undefined} the generator to run, or undefined to run none
+   */
+  generatorFor(compilation, resource) {
+    const found = this.generators();
+    const named = found.filter((one) => typeof one.name !== "undefined");
+    let generator;
+
+    if (named.length === 0) {
+      [generator] = found;
+    } else {
+      const asked = readPreset(resource);
+
+      if (!asked) {
+        return undefined;
+      }
+
+      generator = named.find((one) => one.name === asked);
+
+      if (!generator) {
+        compilation.errors.push(
+          TerserPlugin.buildError(
+            new Error(
+              `Error with '${resource}': no '${asked}' preset in \`generate\`, which defines ${named.map((one) => `'${one.name}'`).join(", ")}.`,
+            ),
+            resource,
+          ),
+        );
+
+        return undefined;
+      }
+    }
+
+    // An `asset` generator runs over what is emitted, so nothing imports it
+    // and `?as=` cannot reach it.
+    if (!generator || generator.type === "asset") {
+      return undefined;
+    }
+
+    return {
+      implementation: generator.implementation,
+      options: generator.options,
+    };
+  }
+
+  /**
+   * Whether any generator rewrites a module as it builds. Only that kind needs
+   * `processResult` to be able to await; an `asset` generator does not.
+   * @private
+   * @returns {boolean} true when one does
+   */
+  hasModuleGenerator() {
+    return this.generators().some((one) => one.type !== "asset");
+  }
+
+  /**
+   * The generators that run over emitted assets rather than over a module as
+   * it builds.
+   * @private
+   * @returns {ReturnType<TerserPlugin["describeGenerator"]>[]} them, in the order they were written
+   */
+  assetGenerators() {
+    return this.generators().filter((one) => one.type === "asset");
+  }
+
+  /**
    * Carries the generator's identity into the persistent cache's version.
    * A generator rewrites a module's own build result, which the pack restores
    * without rebuilding, and nothing per-module keys on a plugin.
@@ -1146,21 +1284,203 @@ class TerserPlugin {
       return;
     }
 
-    const implementations = Array.isArray(generator.implementation)
-      ? generator.implementation
-      : [generator.implementation];
-    // Source rather than `getMinimizerVersion`: a generator already travels as
-    // source, and a custom one has no version to read.
-    const identity = getSerializeJavascript()({
-      generator: implementations.map(String),
-      options: generator.options,
-    });
+    // Every generator, its name and how it is run included: which one a build
+    // reaches is the asset's to decide, so all are part of the pack's answer.
+    const identity = [...this.generators()]
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      .map((one) => [
+        one.name,
+        // Source rather than `getMinimizerVersion`: a generator already
+        // travels as source, and a custom one has no version to read.
+        (Array.isArray(one.implementation)
+          ? one.implementation
+          : [one.implementation]
+        ).map(String),
+        one.type,
+        one.filename,
+        String(one.filter),
+        one.deleteOriginalAssets,
+        one.options,
+      ]);
 
     cache.version = `${cache.version || ""}|TerserPlugin-generate-${crypto
       .createHash("sha256")
-      .update(identity)
+      .update(getSerializeJavascript()(identity))
       .digest("hex")
       .slice(0, 16)}`;
+  }
+
+  /**
+   * Generate one new asset from one already emitted, leaving the original in
+   * place unless the generator asked for it to go.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {ReturnType<Compilation["getCache"]>} cache the generation cache
+   * @param {Asset} asset the asset to generate from
+   * @param {ReturnType<TerserPlugin["assetGenerators"]>[0]} generator the generator to run
+   * @returns {Promise<void>}
+   */
+  async generateAsset(compiler, compilation, cache, asset, generator) {
+    const { RawSource } = compiler.webpack.sources;
+    const { name, info, source } = asset;
+    const code = source.source();
+    const input = Buffer.isBuffer(code) ? code : Buffer.from(code);
+    // The generator is in the item's name rather than its etag: two presets
+    // reading the same asset must not answer for one another.
+    const cacheItem = cache.getItemCache(
+      getSerializeJavascript()({
+        name,
+        generator: String(generator.implementation),
+        options: generator.options,
+      }),
+      cache.getLazyHashedEtag(source),
+    );
+    let output =
+      /** @type {{ code: Buffer, filename?: string, width?: number, height?: number, errors?: (Error | string)[], warnings?: (Error | string)[] } | undefined} */
+      (await cacheItem.getPromise());
+
+    if (!output) {
+      /** @type {MinimizedResult} */
+      let generated;
+
+      try {
+        generated = await minify({
+          name,
+          input,
+          inputSourceMap: undefined,
+          minimizer: {
+            implementation: generator.implementation,
+            options: generator.options,
+          },
+          extractComments: false,
+          ecma: getEcmaVersion(
+            /** @type {NonNullable<NonNullable<import("webpack").Configuration["output"]>["environment"]>} */
+            (compiler.options.output.environment),
+          ),
+        });
+      } catch (error) {
+        compilation.errors.push(
+          TerserPlugin.buildError(
+            /** @type {Error | ErrorObject | string} */ (error),
+            name,
+          ),
+        );
+
+        return;
+      }
+
+      output = {
+        code:
+          typeof generated.code === "undefined"
+            ? input
+            : Buffer.isBuffer(generated.code)
+              ? generated.code
+              : Buffer.from(generated.code),
+        filename: generated.filename,
+        width: generated.width,
+        height: generated.height,
+        errors: (generated.errors || []).map((item) =>
+          TerserPlugin.buildError(
+            /** @type {Error | ErrorObject | string} */ (item),
+            name,
+          ),
+        ),
+        warnings: (generated.warnings || []).map((item) =>
+          TerserPlugin.buildWarning(item, name),
+        ),
+      };
+
+      await cacheItem.storePromise(output);
+    }
+
+    for (const error of /** @type {Error[]} */ (output.errors || [])) {
+      compilation.errors.push(error);
+    }
+
+    for (const warning of /** @type {Error[]} */ (output.warnings || [])) {
+      compilation.warnings.push(warning);
+    }
+
+    const generatedName = generator.filename
+      ? interpolateSize(
+          compilation.getAssetPath(generator.filename, { filename: name }),
+          output,
+        )
+      : output.filename || name;
+
+    // A size the generator never reported leaves its placeholder standing, and
+    // a file named `[width]` is worse than a build that says why.
+    if (/\[(width|height)\]/i.test(generatedName)) {
+      compilation.errors.push(
+        TerserPlugin.buildError(
+          new Error(
+            `Error with '${name}': '${generator.filename}' asks for a size this generator does not report.`,
+          ),
+          name,
+        ),
+      );
+
+      return;
+    }
+    const generatedSource = new RawSource(output.code);
+    // The derived name carries the original's hash, so what the original
+    // promised about its own name still holds; its sourcemap does not follow.
+    const generatedInfo = { ...info, generated: true };
+
+    delete generatedInfo.related;
+
+    if (compilation.getAsset(generatedName)) {
+      compilation.updateAsset(generatedName, generatedSource, generatedInfo);
+
+      return;
+    }
+
+    compilation.emitAsset(generatedName, generatedSource, generatedInfo);
+
+    if (generator.deleteOriginalAssets && compilation.getAsset(name)) {
+      compilation.deleteAsset(name);
+    }
+  }
+
+  /**
+   * Generate new assets from the ones already emitted. Where `generate`
+   * rewrites a module's own bytes as it builds, this adds a file beside one
+   * that is already named, so nothing has to import it.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @returns {Promise<void>}
+   */
+  async generateAssets(compiler, compilation) {
+    const generators = this.assetGenerators();
+
+    if (generators.length === 0) {
+      return;
+    }
+
+    const cache = compilation.getCache("TerserWebpackPlugin|generateAssets");
+    const scheduled = [];
+
+    for (const name of Object.keys(compilation.assets)) {
+      const asset = compilation.getAsset(name);
+
+      if (!asset || asset.info.generated || !this.matchesName(compiler, name)) {
+        continue;
+      }
+
+      for (const generator of generators) {
+        if (generator.filter && !generator.filter(name)) {
+          continue;
+        }
+
+        scheduled.push(
+          this.generateAsset(compiler, compilation, cache, asset, generator),
+        );
+      }
+    }
+
+    await Promise.all(scheduled);
   }
 
   /**
@@ -1330,10 +1650,15 @@ class TerserPlugin {
    * @returns {Promise<LoaderResult>} the result, rewritten or as it came
    */
   async generate(compiler, compilation, variesOn, result, module) {
-    const { generator } = this.options;
     const resource = module.resource || module.identifier();
 
-    if (!generator || !this.matchesName(compiler, resource)) {
+    if (!this.options.generator || !this.matchesName(compiler, resource)) {
+      return result;
+    }
+
+    const generator = this.generatorFor(compilation, resource);
+
+    if (!generator) {
       return result;
     }
 
@@ -1426,6 +1751,128 @@ class TerserPlugin {
   }
 
   /**
+   * The same check as `validateGenerators`, for a minimizer: its options
+   * cannot come from `minify` and the deprecated `minimizerOptions` both.
+   * @private
+   * @returns {void}
+   */
+  validateMinimizers() {
+    // TODO drop this check in the next major release, with the deprecated
+    // `minimizerOptions` it is about.
+    const { minify, minimizerOptions, terserOptions } = this.rawOptions;
+    const declared =
+      typeof minimizerOptions === "undefined"
+        ? terserOptions
+        : minimizerOptions;
+
+    if (typeof declared === "undefined") {
+      return;
+    }
+
+    const written = Array.isArray(minify) ? minify : [minify];
+
+    for (const [index, one] of written.entries()) {
+      const own = isDescriptor(one) ? one.options : undefined;
+      const twice = Array.isArray(minify)
+        ? getMinimizerOptionsAt(declared, index)
+        : declared;
+
+      if (typeof own !== "undefined" && typeof twice !== "undefined") {
+        throw new Error(
+          Array.isArray(minify)
+            ? `The minimizer at \`minify[${index}]\` sets its own \`options\`, and the deprecated \`minimizerOptions\` sets them too. Keep the one in \`minify\`.`
+            : "`minify` sets its own `options`, and the deprecated `minimizerOptions` sets them too. Keep the one in `minify`.",
+        );
+      }
+    }
+  }
+
+  /**
+   * Cross-field checks the schema cannot make: options given twice for one
+   * generator, and a `generatorOptions` key naming no generator.
+   * @private
+   * @returns {void}
+   */
+  validateGenerators() {
+    // TODO drop both checks in the next major release, with the deprecated
+    // `generatorOptions` they are about.
+    const { generator } = this.options;
+
+    if (!generator) {
+      return;
+    }
+
+    const written = generator.implementation;
+    const declared = generator.options;
+    const named = isPresets(written) && !isDescriptor(written);
+    const presets =
+      /** @type {{ [preset: string]: EXPECTED_ANY }} */
+      (/** @type {unknown} */ (written));
+    const perPreset =
+      /** @type {{ [preset: string]: EXPECTED_ANY }} */
+      (declared);
+
+    for (const name of named ? Object.keys(presets) : [undefined]) {
+      const entry = typeof name === "undefined" ? written : presets[name];
+      const own = isDescriptor(entry) ? entry.options : undefined;
+      const twice =
+        typeof name === "undefined" ? declared : perPreset && perPreset[name];
+
+      if (typeof own !== "undefined" && typeof twice !== "undefined") {
+        throw new Error(
+          typeof name === "undefined"
+            ? "`generate` sets its own `options`, and the deprecated `generatorOptions` sets them too. Keep the one in `generate`."
+            : `The '${name}' generator in \`generate\` sets its own \`options\`, and the deprecated \`generatorOptions.${name}\` sets them too. Keep the one in \`generate\`.`,
+        );
+      }
+    }
+
+    // `filename`, `filter` and `deleteOriginalAssets` describe a file written
+    // beside another, which only an `asset` generator does.
+    for (const one of this.generators()) {
+      const misplaced = [];
+
+      if (one.type !== "asset") {
+        if (typeof one.filename !== "undefined") {
+          misplaced.push("filename");
+        }
+
+        if (typeof one.filter !== "undefined") {
+          misplaced.push("filter");
+        }
+
+        if (typeof one.deleteOriginalAssets !== "undefined") {
+          misplaced.push("deleteOriginalAssets");
+        }
+      }
+
+      if (misplaced.length > 0) {
+        throw new Error(
+          `${misplaced.map((field) => `\`${field}\``).join(" and ")} in \`generate\`${
+            typeof one.name === "undefined" ? "" : `'s '${one.name}'`
+          } ${misplaced.length === 1 ? "belongs" : "belong"} to a generator with \`type: "asset"\`, which writes a file beside the one it read. An \`import\` generator renames the module it re-encodes and reads neither.`,
+        );
+      }
+    }
+
+    if (!named || !isPresets(declared)) {
+      return;
+    }
+
+    for (const name of Object.keys(perPreset)) {
+      if (!Object.prototype.hasOwnProperty.call(presets, name)) {
+        throw new Error(
+          `\`generatorOptions.${name}\` names no generator in \`generate\`, which defines ${Object.keys(
+            presets,
+          )
+            .map((one) => `'${one}'`)
+            .join(", ")}.`,
+        );
+      }
+    }
+  }
+
+  /**
    * Validates the options the plugin was constructed with.
    * @private
    * @param {Compiler} compiler compiler
@@ -1438,6 +1885,8 @@ class TerserPlugin {
         this.rawOptions,
         VALIDATION_CONFIGURATION,
       );
+      this.validateMinimizers();
+      this.validateGenerators();
 
       return;
     }
@@ -1451,6 +1900,8 @@ class TerserPlugin {
       this.rawOptions,
       VALIDATION_CONFIGURATION,
     );
+    this.validateMinimizers();
+    this.validateGenerators();
   }
 
   /**
@@ -1546,15 +1997,19 @@ class TerserPlugin {
         });
       }
 
-      if (this.options.generator) {
+      const moduleGenerator = this.hasModuleGenerator()
+        ? this.options.generator
+        : undefined;
+
+      if (moduleGenerator) {
         const generatorData = getSerializeJavascript()({
-          generator: Array.isArray(this.options.generator.implementation)
-            ? this.options.generator.implementation.map(getVersion)
+          generator: Array.isArray(moduleGenerator.implementation)
+            ? moduleGenerator.implementation.map(getVersion)
             : getVersion(
                 /** @type {BasicMinimizerImplementation<EXPECTED_ANY> & MinimizeFunctionHelpers} */
-                (this.options.generator.implementation),
+                (moduleGenerator.implementation),
               ),
-          options: this.options.generator.options,
+          options: moduleGenerator.options,
         });
         const variesOn = new compiler.webpack.sources.RawSource(generatorData);
         const moduleHooks =
@@ -1595,6 +2050,15 @@ class TerserPlugin {
           this.optimize(compiler, compilation, assets, {
             availableNumberOfCores,
           }),
+      );
+
+      compilation.hooks.processAssets.tapPromise(
+        {
+          name: pluginName,
+          stage:
+            compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE,
+        },
+        () => this.generateAssets(compiler, compilation),
       );
 
       compilation.hooks.statsPrinter.tap(pluginName, (stats) => {

@@ -90,6 +90,48 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    */
   private embeddedMinimizer;
   /**
+   * One generator, however it was written: as the generator itself or as an
+   * object stating how to run it.
+   * @private
+   * @param {string | undefined} name the preset it is written under, where it has one
+   * @param {EXPECTED_ANY} entry what was written there
+   * @param {EXPECTED_ANY} declared what `generatorOptions` says for it
+   * @returns {{ name: string | undefined, implementation: EXPECTED_ANY, options: EXPECTED_ANY, type: string | undefined, filename: string | undefined, filter: ((name: string) => boolean) | undefined, deleteOriginalAssets: boolean | undefined }} the generator
+   */
+  private describeGenerator;
+  /**
+   * Every generator `generate` holds, whichever shape it was written in.
+   * @private
+   * @returns {ReturnType<TerserPlugin["describeGenerator"]>[]} them, in the order they were written
+   */
+  private generators;
+  /**
+   * The generator a module asks for by name, or the only one there is.
+   *
+   * A `generate` naming its generators is picked between by `?as=`: a module
+   * that names none is left alone, and one that names a generator nothing
+   * defines is an error rather than a silent decline.
+   * @private
+   * @param {Compilation} compilation compilation
+   * @param {string} resource the module's resource, query and all
+   * @returns {{ implementation: MinimizerImplementation<EXPECTED_ANY>, options: MinimizerOptions<EXPECTED_ANY> } | undefined} the generator to run, or undefined to run none
+   */
+  private generatorFor;
+  /**
+   * Whether any generator rewrites a module as it builds. Only that kind needs
+   * `processResult` to be able to await; an `asset` generator does not.
+   * @private
+   * @returns {boolean} true when one does
+   */
+  private hasModuleGenerator;
+  /**
+   * The generators that run over emitted assets rather than over a module as
+   * it builds.
+   * @private
+   * @returns {ReturnType<TerserPlugin["describeGenerator"]>[]} them, in the order they were written
+   */
+  private assetGenerators;
+  /**
    * Carries the generator's identity into the persistent cache's version.
    * A generator rewrites a module's own build result, which the pack restores
    * without rebuilding, and nothing per-module keys on a plugin.
@@ -98,6 +140,28 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @returns {void}
    */
   private saltCacheVersion;
+  /**
+   * Generate one new asset from one already emitted, leaving the original in
+   * place unless the generator asked for it to go.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @param {ReturnType<Compilation["getCache"]>} cache the generation cache
+   * @param {Asset} asset the asset to generate from
+   * @param {ReturnType<TerserPlugin["assetGenerators"]>[0]} generator the generator to run
+   * @returns {Promise<void>}
+   */
+  private generateAsset;
+  /**
+   * Generate new assets from the ones already emitted. Where `generate`
+   * rewrites a module's own bytes as it builds, this adds a file beside one
+   * that is already named, so nothing has to import it.
+   * @private
+   * @param {Compiler} compiler compiler
+   * @param {Compilation} compilation compilation
+   * @returns {Promise<void>}
+   */
+  private generateAssets;
   /**
    * Minify one source a module embeds in another language's output — CSS or
    * HTML reaching the bundle inside a JavaScript string literal, an
@@ -128,6 +192,20 @@ declare class TerserPlugin<T = import("terser").MinifyOptions> {
    * @returns {Promise<LoaderResult>} the result, rewritten or as it came
    */
   private generate;
+  /**
+   * The same check as `validateGenerators`, for a minimizer: its options
+   * cannot come from `minify` and the deprecated `minimizerOptions` both.
+   * @private
+   * @returns {void}
+   */
+  private validateMinimizers;
+  /**
+   * Cross-field checks the schema cannot make: options given twice for one
+   * generator, and a `generatorOptions` key naming no generator.
+   * @private
+   * @returns {void}
+   */
+  private validateGenerators;
   /**
    * Validates the options the plugin was constructed with.
    * @private
@@ -383,6 +461,14 @@ type MinimizedResult = {
    * the name the result should carry, when re-encoding it changed what the bytes are. Only the `generate` path can honour it: an asset is named while its module is built, before anything downstream refers to it
    */
   filename?: string | undefined;
+  /**
+   * what the result is now wide, where re-encoding knows it. `[width]` in an `asset` generator's `filename` reads it
+   */
+  width?: number | undefined;
+  /**
+   * what the result is now tall, where re-encoding knows it
+   */
+  height?: number | undefined;
   /**
    * source map
    */
