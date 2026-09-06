@@ -27,6 +27,22 @@ export type QueryValues = {
   [name: string]: EXPECTED_ANY;
 };
 /**
+ * Which production of a language an embedded body is written in, as `as` names
+ * it. A `style=""` is `css` with `as: "block-contents"`; JavaScript's are these
+ * three, and only the last is one no engine here parses on its own.
+ */
+export const CLASSIC_SCRIPT: "script";
+export const EVENT_HANDLER: "event-handler";
+export const MODULE_SCRIPT: "module";
+/**
+ * The function a body handed out as an event handler belongs to. Named past any
+ * run of `_` the body holds, so nothing in it resolves to the function instead
+ * of what it meant; the newline ends a line comment the body may close with.
+ * @param {string} body the handler's text
+ * @returns {string} the script it is the body of
+ */
+export function asFunction(body: string): string;
+/**
  * Minify CSS using `clean-css`.
  * @param {Input} input input
  * @param {RawSourceMap=} sourceMap source map
@@ -190,6 +206,14 @@ export namespace esbuildMinifyCss {
    */
   function filter(name: string): boolean;
 }
+/**
+ * The handler body inside the function a minimizer answered with. `undefined`
+ * for an answer that is not that function — one holding anything else, or one
+ * that dropped it whole as the unused declaration it is.
+ * @param {string | undefined} answered what the minimizer answered
+ * @returns {string | undefined} the body, or undefined
+ */
+export function functionBody(answered: string | undefined): string | undefined;
 /**
  * Map a webpack `output.environment` configuration to the highest
  * ECMAScript version that the target is known to support. Returns `5`

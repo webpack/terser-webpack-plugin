@@ -1,0 +1,12 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`a body handed out as a classic script is read as one by \`esbuildMinify\` 1`] = `
+"var o={a:1};with(o)window.ran=a;
+"
+`;
+
+exports[`a body handed out as a classic script is read as one by \`swcMinify\` 1`] = `"var o={a:1};with(o)window.ran=a;"`;
+
+exports[`a body handed out as a classic script is read as one by \`terserMinify\` 1`] = `"var o={a:1};with(o)window.ran=a;"`;
+
+exports[`a body handed out as a classic script is read as one by \`uglifyJsMinify\` 1`] = `"var o={a:1};with(o)window.ran=a;"`;
