@@ -1028,6 +1028,13 @@ function of your own claiming `javascript` is handed it and decides. Ignore it
 at your peril: a module script read as a classic one is a syntax error the
 moment it holds a top-level `await`.
 
+An event handler attribute — `onclick=""` — arrives as **`javascript` with
+`as: "event-handler"`**: its value is a function body, the production the
+`return` cancelling an event is written in. No JavaScript engine here parses one
+on its own, so each built-in minimizer minifies the function that body belongs
+to and answers with the body back out of it. A minify function of your own is
+handed the body as written and reads it however its engine can.
+
 The nested case needs a minifier that can hand its nested bodies out, which it
 also states for itself — webpack's `cssMinify` and `htmlMinify` do:
 

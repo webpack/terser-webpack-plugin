@@ -246,6 +246,41 @@ async function moduleScriptMinify(input, sourceMap, minimizerOptions) {
   };
 }
 
+/**
+ * An event handler attribute's value: a function body, where the `return`
+ * cancelling an event lives. No JavaScript engine parses one on its own.
+ */
+const HANDLER_BODY = "  return  false  ";
+
+/**
+ * A document minifier handing out one `onsubmit=""`: JavaScript again, with
+ * `as` naming the production its value is written in.
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {{ renderEmbeddedSource: (source: string, info: { type: string, as?: string }) => Promise<EXPECTED_ANY> }} minimizerOptions minimizer options
+ * @returns {Promise<EXPECTED_ANY>} the body as its minimizer wrote it
+ */
+async function eventHandlerMinify(input, sourceMap, minimizerOptions) {
+  const rendered = await askRenderer(
+    minimizerOptions.renderEmbeddedSource,
+    HANDLER_BODY,
+    "javascript",
+    "event-handler",
+  );
+  const text = answerText(rendered);
+
+  return {
+    code: typeof text === "string" ? text : HANDLER_BODY,
+    ...answerDiagnostics([rendered]),
+  };
+}
+
+eventHandlerMinify.getTypes = () => ["page"];
+eventHandlerMinify.getEmbeddedTypes = () => ["javascript"];
+eventHandlerMinify.supportsWorker = () => false;
+eventHandlerMinify.supportsWorkerThreads = () => false;
+eventHandlerMinify.filter = (name) => /\.page$/i.test(name);
+
 moduleScriptMinify.getTypes = () => ["page"];
 moduleScriptMinify.getEmbeddedTypes = () => ["javascript"];
 moduleScriptMinify.supportsWorker = () => false;
@@ -570,7 +605,7 @@ describe("which production of JavaScript a body is written in", () => {
   it("reads one as a classic script when that is what it is handed out as", async () => {
     const compiler = getPageCompiler(
       [moduleScriptMinify, MinimizerPlugin.terserMinify],
-      [{ as: "classic" }, {}],
+      [{ as: "script" }, {}],
     );
     const stats = await compile(compiler);
 
@@ -595,4 +630,25 @@ describe("which production of JavaScript a body is written in", () => {
     expect(getErrors(stats)).toHaveLength(1);
     expect(getErrors(stats)[0]).toMatch(/Unexpected token: name \(Promise\)/);
   });
+});
+
+describe("a body handed out as an event handler", () => {
+  it.each([
+    ["terserMinify", MinimizerPlugin.terserMinify],
+    ["uglifyJsMinify", MinimizerPlugin.uglifyJsMinify],
+    ["swcMinify", MinimizerPlugin.swcMinify],
+    ["esbuildMinify", MinimizerPlugin.esbuildMinify],
+  ])(
+    "is minified as the function it belongs to by `%s`",
+    async (name, minifier) => {
+      const compiler = getPageCompiler([eventHandlerMinify, minifier]);
+      const stats = await compile(compiler);
+
+      // A `return` at the top level is a syntax error in either script
+      // production, so reaching one at all is the wrap; what comes back is the
+      // body rather than the function around it.
+      expect(getErrors(stats)).toEqual([]);
+      expect(readAsset("host.page", compiler, stats)).toBe("return!1");
+    },
+  );
 });

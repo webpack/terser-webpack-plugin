@@ -378,6 +378,18 @@ async function terserMinify(
       // toplevel: terserOptions.toplevel
     });
 
+  const {
+    EVENT_HANDLER,
+    asFunction,
+    functionBody,
+  } = require("./production.js");
+
+  // The production is the body's own, and a function body is the one terser has
+  // no goal symbol for: it is minified as the function it belongs to.
+  const handler =
+    typeof minimizerOptions !== "undefined" &&
+    minimizerOptions.as === EVENT_HANDLER;
+
   let minify;
 
   try {
@@ -426,8 +438,19 @@ async function terserMinify(
   }
 
   const [[filename, source]] = Object.entries(input);
-  const code = Buffer.isBuffer(source) ? source.toString() : source;
-  const result = await minify({ [filename]: code }, terserOptions);
+  const text = Buffer.isBuffer(source) ? source.toString() : source;
+  const result = await minify(
+    { [filename]: handler ? asFunction(text) : text },
+    terserOptions,
+  );
+
+  if (handler) {
+    const body = functionBody(result.code);
+
+    // A wrap moves every position, so the map terser wrote describes a script
+    // that is not what comes back.
+    return { code: body === undefined ? text : body, extractedComments };
+  }
 
   return {
     code: /** @type {string} * */ (result.code),
@@ -644,6 +667,18 @@ async function uglifyJsMinify(
     };
   };
 
+  const {
+    EVENT_HANDLER,
+    asFunction,
+    functionBody,
+  } = require("./production.js");
+
+  // A function body is the production uglify-js has no goal symbol for, so the
+  // function it belongs to is what is minified.
+  const handler =
+    typeof minimizerOptions !== "undefined" &&
+    minimizerOptions.as === EVENT_HANDLER;
+
   let minify;
 
   try {
@@ -671,8 +706,24 @@ async function uglifyJsMinify(
   );
 
   const [[filename, source]] = Object.entries(input);
-  const code = Buffer.isBuffer(source) ? source.toString() : source;
-  const result = await minify({ [filename]: code }, uglifyJsOptions);
+  const text = Buffer.isBuffer(source) ? source.toString() : source;
+  const result = await minify(
+    { [filename]: handler ? asFunction(text) : text },
+    uglifyJsOptions,
+  );
+
+  if (handler) {
+    const body = functionBody(result.code);
+
+    // A wrap moves every position, so the map uglify-js wrote describes a
+    // script that is not what comes back.
+    return {
+      code: body === undefined ? text : body,
+      errors: result.error ? [result.error] : [],
+      warnings: result.warnings || [],
+      extractedComments,
+    };
+  }
 
   return {
     code: result.code,
@@ -849,6 +900,18 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
       sourceMap: undefined,
     });
 
+  const {
+    EVENT_HANDLER,
+    asFunction,
+    functionBody,
+  } = require("./production.js");
+
+  // A function body is the production swc has no goal symbol for, so the
+  // function it belongs to is what is minified.
+  const handler =
+    typeof minimizerOptions !== "undefined" &&
+    minimizerOptions.as === EVENT_HANDLER;
+
   let swc;
 
   try {
@@ -898,10 +961,21 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
   }
 
   const [[filename, source]] = Object.entries(input);
-  const code = Buffer.isBuffer(source) ? source.toString() : source;
+  const text = Buffer.isBuffer(source) ? source.toString() : source;
   const result =
     /** @type {import("@swc/core").Output & { extractedComments?: string[] }} */
-    (await swc.minify(code, swcOptions));
+    (await swc.minify(handler ? asFunction(text) : text, swcOptions));
+
+  if (handler) {
+    const body = functionBody(result.code);
+
+    // A wrap moves every position, so the map swc wrote describes a script that
+    // is not what comes back.
+    return {
+      code: body === undefined ? text : body,
+      extractedComments: result.extractedComments || [],
+    };
+  }
 
   let map;
 
@@ -982,6 +1056,18 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
     };
   };
 
+  const {
+    EVENT_HANDLER,
+    asFunction,
+    functionBody,
+  } = require("./production.js");
+
+  // A function body is the production esbuild has no goal symbol for, so the
+  // function it belongs to is what is minified.
+  const handler =
+    typeof minimizerOptions !== "undefined" &&
+    minimizerOptions.as === EVENT_HANDLER;
+
   let esbuild;
 
   try {
@@ -1000,15 +1086,21 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
   }
 
   const [[filename, source]] = Object.entries(input);
-  const code = Buffer.isBuffer(source) ? source.toString() : source;
+  const text = Buffer.isBuffer(source) ? source.toString() : source;
 
   esbuildOptions.sourcefile = filename;
 
-  const result = await esbuild.transform(code, esbuildOptions);
+  const result = await esbuild.transform(
+    handler ? asFunction(text) : text,
+    esbuildOptions,
+  );
+  const body = handler ? functionBody(result.code) : undefined;
 
   return {
-    code: result.code,
-    map: result.map ? JSON.parse(result.map) : undefined,
+    code: handler ? (body === undefined ? text : body) : result.code,
+    // A wrap moves every position, so the map esbuild wrote describes a script
+    // that is not what comes back.
+    map: handler || !result.map ? undefined : JSON.parse(result.map),
     warnings:
       result.warnings.length > 0
         ? result.warnings.map((item) => {

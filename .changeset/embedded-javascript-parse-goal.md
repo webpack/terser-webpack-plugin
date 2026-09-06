@@ -2,4 +2,4 @@
 "minimizer-webpack-plugin": patch
 ---
 
-read `as` on an embedded JavaScript body as the built-in minimizers' own `module` option, so a module script is not read as a classic one and the engine is never handed the word
+read `as` on an embedded JavaScript body: the built-in minimizers take `module` as their own option and minify an `event-handler` body as the function it belongs to, so neither production is read as a classic script and no engine is handed the word
