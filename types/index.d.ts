@@ -636,6 +636,9 @@ type InternalPluginOptions<T> = BasePluginOptions & {
   minimizer: {
     implementation: MinimizerImplementation<T>;
     options: MinimizerOptions<T>;
+    filters?: (
+      ((name: string, info: AssetInfo) => boolean | undefined) | undefined
+    )[];
   };
   generator?: {
     implementation: MinimizerImplementation<T>;

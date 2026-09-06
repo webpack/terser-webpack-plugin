@@ -2446,9 +2446,11 @@ function isDescriptor(entry) {
  * Flattens the objects `minify` may hold into the implementation-and-options
  * pair the rest of the plugin reads, so a descriptor's own `options` and the
  * deprecated `minimizerOptions` end up in one place, aligned by position.
+ * `filters` is parallel to `implementation`, and holds only what a descriptor
+ * stated: an entry left undefined falls back to the function's own `filter`.
  * @param {EXPECTED_ANY} minify what `minify` was set to
  * @param {EXPECTED_ANY} declared what `minimizerOptions` says
- * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
+ * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY, filters?: (((name: string, info: EXPECTED_ANY) => boolean | undefined) | undefined)[] }} the pair, and the filters descriptors stated
  */
 function normalizeMinimizers(minify, declared) {
   // TODO drop the `declared` fallback in the next major release, with the
@@ -2457,6 +2459,10 @@ function normalizeMinimizers(minify, declared) {
     if (!minify.some(isDescriptor)) {
       return { implementation: minify, options: declared };
     }
+
+    const filters = minify.map((one) =>
+      isDescriptor(one) ? one.filter : undefined,
+    );
 
     return {
       implementation: minify.map((one) =>
@@ -2467,6 +2473,7 @@ function normalizeMinimizers(minify, declared) {
           ? one.options
           : getMinimizerOptionsAt(declared, index),
       ),
+      ...(filters.some((one) => typeof one === "function") ? { filters } : {}),
     };
   }
 
@@ -2475,6 +2482,9 @@ function normalizeMinimizers(minify, declared) {
       implementation: minify.implementation,
       options:
         typeof minify.options === "undefined" ? declared : minify.options,
+      ...(typeof minify.filter === "function"
+        ? { filters: [minify.filter] }
+        : {}),
     };
   }
 
