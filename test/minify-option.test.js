@@ -1714,6 +1714,23 @@ describe("minify option written as an object", () => {
     expect(first.saw.tag).toBe("from-minimizer-options");
   });
 
+  it("should reject a minimizer written as an object holding several", () => {
+    const first = recorder();
+    const second = recorder();
+
+    expect(() =>
+      getCompiler({
+        plugins: [
+          new MinimizerPlugin({
+            // Several minimizers are an array of objects, not one object
+            // holding two lists that have to line up.
+            minify: { implementation: [first, second] },
+          }),
+        ],
+      }),
+    ).toThrow(/should be an instance of function/);
+  });
+
   it("should reject options given in both places for one minimizer", () => {
     const first = recorder();
 

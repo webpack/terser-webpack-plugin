@@ -321,7 +321,7 @@ type minifyFn = (
 }>;
 
 interface minimizer {
-  implementation: minifyFn | minifyFn[];
+  implementation: minifyFn;
   options?: Record<string, any>;
 }
 
@@ -335,7 +335,9 @@ By default plugin uses [terser](https://github.com/terser/terser) package.
 Useful for using and testing unpublished versions or forks.
 
 A minimizer can be written as an object instead, which is where its own
-options live — one minimizer configured in one place:
+options live — one minimizer configured in one place. Several minimizers are
+an array of them, rather than one object holding two lists that have to line
+up:
 
 ```js
 new MinimizerPlugin({
@@ -459,19 +461,13 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: {
-          implementation: [
-            MinimizerPlugin.terserMinify,
-            MinimizerPlugin.swcMinify,
-          ],
-          // One entry per implementation, in the same order
-          options: [
-            // Options for `MinimizerPlugin.terserMinify`
-            { mangle: false },
-            // Options for `MinimizerPlugin.swcMinify`
-            {},
-          ],
-        },
+        minify: [
+          {
+            implementation: MinimizerPlugin.terserMinify,
+            options: { mangle: false },
+          },
+          { implementation: MinimizerPlugin.swcMinify },
+        ],
       }),
     ],
   },
@@ -612,7 +608,7 @@ type generateFn = (
 }>;
 
 interface generator {
-  implementation: generateFn | generateFn[];
+  implementation: generateFn;
   options?: Record<string, any>;
   type?: "import" | "asset";
   filename?: string;
@@ -1683,16 +1679,12 @@ module.exports = {
     minimizer: [
       new MinimizerPlugin({
         test: /\.(?:[cm]?js|css|html|json)(\?.*)?$/i,
-        minify: {
-          implementation: [
-            MinimizerPlugin.terserMinify,
-            cssMinify,
-            htmlMinify,
-            MinimizerPlugin.jsonMinify,
-          ],
-          // Positional: one entry per `minify` entry, in the same order.
-          options: [{}, {}, {}, {}],
-        },
+        minify: [
+          { implementation: MinimizerPlugin.terserMinify },
+          { implementation: cssMinify },
+          { implementation: htmlMinify },
+          { implementation: MinimizerPlugin.jsonMinify },
+        ],
       }),
     ],
   },
@@ -2299,21 +2291,15 @@ module.exports = {
     minimizer: [
       new MinimizerPlugin({
         test: /\.(js|css|svg|png|jpe?g)$/i,
-        minify: {
-          implementation: [
-            MinimizerPlugin.terserMinify,
-            MinimizerPlugin.cssnanoMinify,
-            MinimizerPlugin.svgoMinify,
-            MinimizerPlugin.sharpMinify,
-          ],
-          // One entry per minimizer, in the same order
-          options: [
-            {},
-            {},
-            {},
-            { encodeOptions: { png: { compressionLevel: 9 } } },
-          ],
-        },
+        minify: [
+          { implementation: MinimizerPlugin.terserMinify },
+          { implementation: MinimizerPlugin.cssnanoMinify },
+          { implementation: MinimizerPlugin.svgoMinify },
+          {
+            implementation: MinimizerPlugin.sharpMinify,
+            options: { encodeOptions: { png: { compressionLevel: 9 } } },
+          },
+        ],
       }),
     ],
   },

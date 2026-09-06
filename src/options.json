@@ -225,18 +225,7 @@
           "properties": {
             "implementation": {
               "description": "The minimizer itself.",
-              "anyOf": [
-                {
-                  "instanceof": "Function"
-                },
-                {
-                  "type": "array",
-                  "minItems": 1,
-                  "items": {
-                    "instanceof": "Function"
-                  }
-                }
-              ]
+              "instanceof": "Function"
             },
             "options": {
               "description": "Options for this minimizer. Preferred over `minimizerOptions`, which is deprecated; setting both for one minimizer is an error.",
@@ -268,18 +257,7 @@
           "properties": {
             "implementation": {
               "description": "The generator itself.",
-              "anyOf": [
-                {
-                  "instanceof": "Function"
-                },
-                {
-                  "type": "array",
-                  "minItems": 1,
-                  "items": {
-                    "instanceof": "Function"
-                  }
-                }
-              ]
+              "instanceof": "Function"
             },
             "options": {
               "description": "Options for this generator. Preferred over `generatorOptions`, which is deprecated; setting both for one generator is an error.",
@@ -327,18 +305,7 @@
                 "properties": {
                   "implementation": {
                     "description": "The generator itself.",
-                    "anyOf": [
-                      {
-                        "instanceof": "Function"
-                      },
-                      {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {
-                          "instanceof": "Function"
-                        }
-                      }
-                    ]
+                    "instanceof": "Function"
                   },
                   "options": {
                     "description": "Options for this generator. Preferred over `generatorOptions`, which is deprecated; setting both for one generator is an error.",
