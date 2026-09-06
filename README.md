@@ -370,6 +370,22 @@ default one, and the tables in
 [webpack's own minimizers](#webpacks-own-minimizers) for `cssMinify` and
 `htmlMinify`.
 
+`filter(name, info)` states which assets this minimizer is offered — return
+`false` to decline one, and anything else (`undefined` included) to accept. It
+answers for a `filter` property on the minimizer function itself, which is what
+the built-ins carry, so setting it here is how you narrow one of them without
+wrapping it.
+
+```js
+new MinimizerPlugin({
+  minify: {
+    implementation: MinimizerPlugin.sharpMinify,
+    options: { encodeOptions: { jpeg: { quality: 80 } } },
+    filter: (name) => !name.includes("do-not-touch"),
+  },
+});
+```
+
 Two keys are filled in before a minimizer sees them, and only when `options`
 does not set them itself: `ecma`, from
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment),
@@ -441,7 +457,28 @@ module.exports = {
 };
 ```
 
-This is what lets **one plugin instance and one worker pool** handle every
+Each entry carries its own `filter` as well as its own `options`, which is how
+the same minimizer runs twice over different assets:
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  minify: [
+    {
+      implementation: MinimizerPlugin.sharpMinify,
+      options: { encodeOptions: { jpeg: { quality: 60 } } },
+      filter: (name) => name.includes("thumb"),
+    },
+    {
+      implementation: MinimizerPlugin.sharpMinify,
+      options: { encodeOptions: { jpeg: { quality: 90 } } },
+      filter: (name) => !name.includes("thumb"),
+    },
+  ],
+});
+```
+
+This is also what lets **one plugin instance and one worker pool** handle every
 asset type: each built-in ships with a `filter` matching its natural
 extension, so JS, CSS, HTML and JSON need no second instance. `test` still
 defaults to JS only, so widen it to let the other assets reach the dispatcher:
@@ -1177,7 +1214,9 @@ What this reaches:
   `exportType` but `link`).
 - The text an `asset/source` module embeds, and the payload an `asset/inline`
   module encodes — the payload before it is encoded, so the encoding covers
-  what came back.
+  what came back. **A language written as text only**: an inline `svg` is
+  offered, an inline `png` or `jpeg` is not, so a raster image that becomes a
+  `data:` URI is minified by [`generate`](#generate) rather than here.
 - What a document or a stylesheet nests inside itself: an inline `<style>`,
   every `style=""`, a `<script>` holding JavaScript or JSON, an `<svg>` subtree,
   the document an `<iframe srcdoc>` holds, and the payload of a `url()` `data:`
@@ -1949,6 +1988,32 @@ npm install --save-dev imagemin imagemin-mozjpeg imagemin-pngquant
 > `sharp` and `imagemin` read the asset's bytes rather than its text, so they
 > run in the webpack process rather than in the worker pool — they do their own
 > threading. Minimizers configured beside them keep the pool.
+
+#### Images that never become files
+
+`minify` runs over emitted assets, so an image that becomes a `data:` URI
+instead of a file — `asset/inline`, or `asset` under
+[`Rule.parser.dataUrlCondition`](https://webpack.js.org/configuration/module/#ruleparserdataurlcondition)
+— never reaches it. An SVG is the exception, since it is text and webpack
+offers it as [embedded source](#embedded-source).
+
+Put the same minimizer under [`generate`](#generate) and it does reach one: a
+generator runs while the module builds, over the bytes themselves, before
+anything encodes them. It renames nothing unless it answers with a name, so a
+minimizer stays a minimizer there.
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: { implementation: MinimizerPlugin.sharpMinify },
+});
+```
+
+Do not list the same image minimizer in both for the same assets — an emitted
+one would then be re-encoded twice, which costs time and, for a lossy format,
+quality. `generate` covers inlined and emitted images alike; `minify` is the
+one to keep when nothing is inlined, since it runs after the whole build and
+caches per asset. An `"import"` generator needs **webpack 5.111 or newer**.
 
 #### Lossless and lossy
 

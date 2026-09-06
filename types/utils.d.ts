@@ -536,9 +536,11 @@ export namespace napiRsImageMinify {
  * Flattens the objects `minify` may hold into the implementation-and-options
  * pair the rest of the plugin reads, so a descriptor's own `options` and the
  * deprecated `minimizerOptions` end up in one place, aligned by position.
+ * `filters` is parallel to `implementation`, and holds only what a descriptor
+ * stated: an entry left undefined falls back to the function's own `filter`.
  * @param {EXPECTED_ANY} minify what `minify` was set to
  * @param {EXPECTED_ANY} declared what `minimizerOptions` says
- * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
+ * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY, filters?: (((name: string, info: EXPECTED_ANY) => boolean | undefined) | undefined)[] }} the pair, and the filters descriptors stated
  */
 export function normalizeMinimizers(
   minify: EXPECTED_ANY,
@@ -546,6 +548,9 @@ export function normalizeMinimizers(
 ): {
   implementation: EXPECTED_ANY;
   options: EXPECTED_ANY;
+  filters?: (
+    ((name: string, info: EXPECTED_ANY) => boolean | undefined) | undefined
+  )[];
 };
 /**
  * The version a package reports. Read by walking up from its resolved entry

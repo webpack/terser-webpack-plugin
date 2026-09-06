@@ -220,7 +220,7 @@ const {
 
 /**
  * @template T
- * @typedef {BasePluginOptions & { minimizer: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }, generator?: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> } }} InternalPluginOptions
+ * @typedef {BasePluginOptions & { minimizer: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T>, filters?: (((name: string, info: AssetInfo) => boolean | undefined) | undefined)[] }, generator?: { implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> } }} InternalPluginOptions
  */
 
 const VALIDATION_CONFIGURATION = {
@@ -287,7 +287,7 @@ class TerserPlugin {
       include,
       exclude,
       minimizer:
-        /** @type {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T> }} */
+        /** @type {{ implementation: MinimizerImplementation<T>, options: MinimizerOptions<T>, filters?: (((name: string, info: AssetInfo) => boolean | undefined) | undefined)[] }} */
         (normalizeMinimizers(minify, resolvedMinimizerOptions)),
       // Absent unless asked for: it runs while modules build, where the plugin
       // otherwise does nothing.
@@ -508,15 +508,19 @@ class TerserPlugin {
      */
     const matchingMinimizers = (name, info) => {
       const matched = [];
+      const { filters } = this.options.minimizer;
 
       for (let i = 0; i < implementations.length; i++) {
         const impl = implementations[i];
+        // What `minify` states about this entry answers for it; the property on
+        // the function is what a minimizer says about itself, and is the
+        // fallback rather than a second filter to satisfy.
+        const filter =
+          filters && typeof filters[i] === "function"
+            ? filters[i]
+            : impl.filter;
 
-        if (
-          typeof impl.filter !== "function" ||
-          // eslint-disable-next-line unicorn/no-array-method-this-argument
-          impl.filter(name, info) !== false
-        ) {
+        if (typeof filter !== "function" || filter(name, info) !== false) {
           matched.push(i);
         }
       }

@@ -132,15 +132,15 @@ exports[`validation validate 9`] = `
 exports[`validation validate 10`] = `
 "Invalid options object. Terser Plugin has been initialized using an options object that does not match the API schema.
  - options.minify should be one of these:
-   function | [function | object { implementation, options? }, ...] (should not have fewer than 1 item) | object { implementation, options? }
+   function | [function | object { implementation, options?, filter? }, ...] (should not have fewer than 1 item) | object { implementation, options?, filter? }
    -> Allows you to override default minify function. Written as an object it states how to run one minimizer, options included.
    -> Read more at https://github.com/webpack/minimizer-webpack-plugin#number
    Details:
     * options.minify should be an instance of function.
     * options.minify should be an array:
-      [function | object { implementation, options? }, ...] (should not have fewer than 1 item)
+      [function | object { implementation, options?, filter? }, ...] (should not have fewer than 1 item)
     * options.minify should be an object:
-      object { implementation, options? }"
+      object { implementation, options?, filter? }"
 `;
 
 exports[`validation validate 11`] = `

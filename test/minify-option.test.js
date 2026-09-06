@@ -1699,6 +1699,125 @@ describe("minify option written as an object", () => {
     expect(described.saw.tag).toBe("second");
   });
 
+  /**
+   * @returns {EXPECTED_ANY} a minimizer that records the assets it was handed
+   */
+  function watcher() {
+    /**
+     * @param {{ [file: string]: string }} input input
+     * @param {undefined} sourceMap source map
+     * @param {{ tag?: string }} minimizerOptions the options it was handed
+     * @returns {{ code: string }} the minified result
+     */
+    function minimize(input, sourceMap, minimizerOptions) {
+      const [[name, code]] = Object.entries(input);
+
+      minimize.seen.push(`${name}:${minimizerOptions.tag}`);
+
+      return { code };
+    }
+
+    minimize.supportsWorker = () => false;
+    minimize.seen = [];
+
+    return minimize;
+  }
+
+  /**
+   * @returns {import("webpack").Compiler} a compiler emitting `one.js` and `two.js`
+   */
+  function twoAssets() {
+    return getCompiler({
+      entry: {
+        one: path.resolve(__dirname, "./fixtures/minify/es6.js"),
+        two: path.resolve(__dirname, "./fixtures/minify/es6.js"),
+      },
+    });
+  }
+
+  it("should offer a minimizer only what its own `filter` accepts", async () => {
+    const only = watcher();
+    const compiler = twoAssets();
+
+    new MinimizerPlugin({
+      minify: {
+        implementation: only,
+        options: { tag: "one" },
+        filter: (name) => name === "one.js",
+      },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(only.seen).toEqual(["one.js:one"]);
+  });
+
+  it("should run one minimizer twice, each entry filtered and configured on its own", async () => {
+    const shared = watcher();
+    const compiler = twoAssets();
+
+    // The reason `filter` is a field rather than only a property on the
+    // function: two entries of the same minimizer cannot each carry their own.
+    new MinimizerPlugin({
+      minify: [
+        {
+          implementation: shared,
+          options: { tag: "first" },
+          filter: (name) => name === "one.js",
+        },
+        {
+          implementation: shared,
+          options: { tag: "second" },
+          filter: (name) => name === "two.js",
+        },
+      ],
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(shared.seen.sort()).toEqual(["one.js:first", "two.js:second"]);
+  });
+
+  it("should let the `filter` in `minify` answer for one the function carries", async () => {
+    const declining = watcher();
+
+    declining.filter = () => false;
+
+    const compiler = twoAssets();
+
+    new MinimizerPlugin({
+      minify: {
+        implementation: declining,
+        options: { tag: "asked" },
+        filter: (name) => name === "two.js",
+      },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(declining.seen).toEqual(["two.js:asked"]);
+  });
+
+  it("should fall back to the `filter` the function carries", async () => {
+    const own = watcher();
+
+    own.filter = (name) => name === "one.js";
+
+    const compiler = twoAssets();
+
+    new MinimizerPlugin({
+      minify: { implementation: own, options: { tag: "own" } },
+    }).apply(compiler);
+
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(own.seen).toEqual(["one.js:own"]);
+  });
+
   it("should still take them from the deprecated `minimizerOptions`", async () => {
     const first = recorder();
     const compiler = getCompiler();

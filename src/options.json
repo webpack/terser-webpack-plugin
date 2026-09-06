@@ -212,6 +212,10 @@
                     "description": "Options for this minimizer. Preferred over `minimizerOptions`, which is deprecated; setting both for one minimizer is an error.",
                     "type": "object",
                     "additionalProperties": true
+                  },
+                  "filter": {
+                    "description": "Which assets this minimizer is offered, decided by name and info. Overrides a `filter` on the minimizer function itself.",
+                    "instanceof": "Function"
                   }
                 },
                 "required": ["implementation"]
@@ -231,6 +235,10 @@
               "description": "Options for this minimizer. Preferred over `minimizerOptions`, which is deprecated; setting both for one minimizer is an error.",
               "type": "object",
               "additionalProperties": true
+            },
+            "filter": {
+              "description": "Which assets this minimizer is offered, decided by name and info. Overrides a `filter` on the minimizer function itself.",
+              "instanceof": "Function"
             }
           },
           "required": ["implementation"]
