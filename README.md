@@ -727,15 +727,64 @@ new MinimizerPlugin({
 ```
 
 `type` decides which of the two things a generator does, and they are not
-interchangeable:
+interchangeable — they read different input, at different points in the build:
 
-- `"import"` (the default) re-encodes a module **as it builds**, so the import
-  that asked for it is renamed with it. That is the only point at which a
-  rename can reach the bundle, and it needs the webpack noted below.
-- `"asset"` writes a **new file beside one already emitted**, which nothing has
-  to import — a `.webp` next to a copied `.png`, say. Nothing points at it, so
-  `?as=` cannot reach it and it runs on any webpack. An asset already generated
-  is never generated from again.
+|                                | `"import"` (the default)                   | `"asset"`                                               |
+| :----------------------------- | :----------------------------------------- | :------------------------------------------------------ |
+| Reads                          | a module, **as it builds**                 | an asset, **once it is emitted**                        |
+| Produces                       | that module's own bytes, renamed with them | a **new file beside** the one it read                   |
+| Picked by                      | `?as=<name>` on the import                 | `test` / `include` / `exclude`, then `filter`           |
+| Reaches a file nothing imports | no                                         | yes — copied assets included                            |
+| Fields it reads                | `implementation`, `options`                | those plus `filename`, `filter`, `deleteOriginalAssets` |
+| webpack                        | **5.111** or newer                         | any supported version                                   |
+
+**`"import"`** is the only point at which a rename can reach the bundle: the
+asset is named while its module is built, so every reference follows it. The
+import that asked for the conversion gets the converted file.
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: { webp: { implementation: MinimizerPlugin.sharpGenerate } },
+});
+```
+
+```js
+import url from "./photo.jpg?as=webp"; // url is "photo.webp"
+```
+
+```
+photo.webp    the jpg became this
+```
+
+**`"asset"`** leaves what it read alone and writes another file next to it, so
+both survive — the `<picture>` case, where the `.webp` goes in a `srcset` you
+write yourself and the `.jpg` stays as the fallback. Nothing imports the new
+file, so `?as=` cannot reach it and its preset name selects nothing; the name
+is only how you address its options. An asset already generated is never
+generated from again.
+
+```js
+new MinimizerPlugin({
+  test: /\.(jpe?g|png)$/i,
+  generate: {
+    webp: { implementation: MinimizerPlugin.sharpGenerate, type: "asset" },
+  },
+});
+```
+
+```js
+import url from "./photo.jpg"; // url is "photo.jpg", unchanged
+```
+
+```
+photo.jpg     still there, unless `deleteOriginalAssets`
+photo.webp    generated beside it
+```
+
+`filename`, `filter` and `deleteOriginalAssets` describe a file being written
+beside another, so they belong to `"asset"` and setting one on an `"import"`
+generator is an error rather than a field that quietly does nothing.
 
 `ecma` is filled in from
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)

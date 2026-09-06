@@ -1087,6 +1087,28 @@ describe("generate options", () => {
     });
   }
 
+  it("should reject an asset-only field on an `import` generator", () => {
+    const webp = encoderNamed("WEBP", "webp");
+
+    expect(() =>
+      construct({
+        generate: { webp: { implementation: webp, filename: "[name].webp" } },
+      }),
+    ).toThrow(/`filename` in `generate`'s 'webp' belongs to a generator with/);
+
+    expect(() =>
+      construct({
+        generate: {
+          webp: {
+            implementation: webp,
+            filter: () => true,
+            deleteOriginalAssets: true,
+          },
+        },
+      }),
+    ).toThrow(/`filter` and `deleteOriginalAssets` in `generate`'s 'webp'/);
+  });
+
   it("should reject options given in both places for one generator", () => {
     const webp = encoderNamed("WEBP");
 

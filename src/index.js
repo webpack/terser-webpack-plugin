@@ -1827,6 +1827,34 @@ class TerserPlugin {
       }
     }
 
+    // `filename`, `filter` and `deleteOriginalAssets` describe a file written
+    // beside another, which only an `asset` generator does.
+    for (const one of this.generators()) {
+      const misplaced = [];
+
+      if (one.type !== "asset") {
+        if (typeof one.filename !== "undefined") {
+          misplaced.push("filename");
+        }
+
+        if (typeof one.filter !== "undefined") {
+          misplaced.push("filter");
+        }
+
+        if (typeof one.deleteOriginalAssets !== "undefined") {
+          misplaced.push("deleteOriginalAssets");
+        }
+      }
+
+      if (misplaced.length > 0) {
+        throw new Error(
+          `${misplaced.map((field) => `\`${field}\``).join(" and ")} in \`generate\`${
+            typeof one.name === "undefined" ? "" : `'s '${one.name}'`
+          } ${misplaced.length === 1 ? "belongs" : "belong"} to a generator with \`type: "asset"\`, which writes a file beside the one it read. An \`import\` generator renames the module it re-encodes and reads neither.`,
+        );
+      }
+    }
+
     if (!named || !isPresets(declared)) {
       return;
     }
