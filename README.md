@@ -751,11 +751,23 @@ new MinimizerPlugin({
 
 ```js
 import url from "./photo.jpg?as=webp"; // url is "photo.webp"
+
+const same = new URL("./photo.jpg?as=webp", import.meta.url); // photo.webp
+```
+
+```css
+.hero {
+  background: url("./photo.jpg?as=webp"); /* photo.webp */
+}
 ```
 
 ```
 photo.webp    the jpg became this
 ```
+
+Those are one asset module between them, so an `import`, a `new URL()` and a
+CSS `url()` all follow the rename. An asset inlined as a data URI carries no
+file name, and takes the media type of what it became — `data:image/webp;…`.
 
 **`"asset"`** leaves what it read alone and writes another file next to it, so
 both survive — the `<picture>` case, where the `.webp` goes in a `srcset` you

@@ -259,6 +259,93 @@ describe("generate option", () => {
     expect(names).not.toContain("image.jpg?w=100#frag");
   });
 
+  it("should point a `new URL()` reference at the renamed asset", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/url-image.js"),
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g/i, generate: { webp: toWebp } }).apply(
+      compiler,
+    );
+
+    const stats = await compile(compiler);
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    const names = Object.keys(stats.compilation.assets);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(names).toContain("image.webp");
+    expect(names).not.toContain("image.jpg");
+
+    // A `new URL()` reads the same asset module an `import` does, so the rename
+    // has to reach it too — it is the reference an image is usually behind.
+    const bundle = readBytes(compiler, stats, "main.js").toString();
+
+    expect(bundle).toContain('"image.webp"');
+    expect(bundle).not.toContain('"image.jpg"');
+  });
+
+  it("should point a CSS `url()` at the renamed asset", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/css-image.js"),
+      experiments: { css: true },
+      module: { rules: IMAGE_RULES },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g/i, generate: { webp: toWebp } }).apply(
+      compiler,
+    );
+
+    const stats = await compile(compiler);
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    const names = Object.keys(stats.compilation.assets);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(names).toContain("image.webp");
+    expect(names).not.toContain("image.jpg");
+
+    const styles = readBytes(compiler, stats, "main.css").toString();
+
+    expect(styles).toContain("image.webp");
+    expect(styles).not.toContain("image.jpg");
+  });
+
+  it("should give an inlined asset the media type of what it became", async () => {
+    const compiler = getCompiler({
+      entry: path.resolve(__dirname, "./fixtures/url-image.js"),
+      module: {
+        rules: [{ test: /\.(png|jpe?g|svg)$/i, type: "asset/inline" }],
+      },
+    });
+
+    new MinimizerPlugin({ test: /\.jpe?g/i, generate: { webp: toWebp } }).apply(
+      compiler,
+    );
+
+    const stats = await compile(compiler);
+
+    if (reportedNoAwait(stats)) {
+      return;
+    }
+
+    expect(getErrors(stats)).toEqual([]);
+
+    // Nothing is emitted for an inlined asset, so the rename shows up as the
+    // media type of the data URI rather than as a file name.
+    const bundle = readBytes(compiler, stats, "main.js").toString();
+
+    expect(bundle).toContain("data:image/webp;base64,");
+    expect(bundle).not.toContain("data:image/jpeg");
+  });
+
   it("should leave assets the filters reject alone", async () => {
     const compiler = getCompiler({
       entry: path.resolve(__dirname, "./fixtures/images.js"),
