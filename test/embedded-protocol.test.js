@@ -305,6 +305,41 @@ async function classicScriptMinify(input, sourceMap, minimizerOptions) {
   };
 }
 
+/**
+ * A handler body that is a syntax error inside the function too, so no
+ * minimizer can answer with the function it was handed.
+ */
+const BROKEN_HANDLER_BODY = "var = broken(";
+
+/**
+ * A document minifier handing out one `onclick=""` no JavaScript production
+ * holds. What parses is the minimizer's business, as it is for a `<script>`.
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {{ renderEmbeddedSource: (source: string, info: { type: string, as?: string }) => Promise<EXPECTED_ANY> }} minimizerOptions minimizer options
+ * @returns {Promise<EXPECTED_ANY>} the body as its minimizer wrote it
+ */
+async function brokenHandlerMinify(input, sourceMap, minimizerOptions) {
+  const rendered = await askRenderer(
+    minimizerOptions.renderEmbeddedSource,
+    BROKEN_HANDLER_BODY,
+    "javascript",
+    "event-handler",
+  );
+  const text = answerText(rendered);
+
+  return {
+    code: typeof text === "string" ? text : BROKEN_HANDLER_BODY,
+    ...answerDiagnostics([rendered]),
+  };
+}
+
+brokenHandlerMinify.getTypes = () => ["page"];
+brokenHandlerMinify.getEmbeddedTypes = () => ["javascript"];
+brokenHandlerMinify.supportsWorker = () => false;
+brokenHandlerMinify.supportsWorkerThreads = () => false;
+brokenHandlerMinify.filter = (name) => /\.page$/i.test(name);
+
 classicScriptMinify.getTypes = () => ["page"];
 classicScriptMinify.getEmbeddedTypes = () => ["javascript"];
 classicScriptMinify.supportsWorker = () => false;
@@ -654,6 +689,32 @@ describe("which production of JavaScript a body is written in", () => {
     );
   });
 
+  it.each([
+    ["terserMinify", MinimizerPlugin.terserMinify],
+    ["uglifyJsMinify", MinimizerPlugin.uglifyJsMinify],
+    ["swcMinify", MinimizerPlugin.swcMinify],
+    ["esbuildMinify", MinimizerPlugin.esbuildMinify],
+  ])("never hands the word itself to `%s`", async (name, minifier) => {
+    // Each engine rejects an unknown option outright — terser and uglify-js
+    // with "`as` is not a supported option", swc and esbuild in their own words.
+    for (const handOut of [
+      [moduleScriptMinify, "script"],
+      [moduleScriptMinify, "module"],
+      [eventHandlerMinify, undefined],
+    ]) {
+      const [document, as] = handOut;
+      const compiler = getPageCompiler(
+        [document, minifier],
+        [as === undefined ? {} : { as }, {}],
+      );
+      const stats = await compile(compiler);
+
+      expect(getErrors(stats).join("\n")).not.toMatch(
+        /supported option|unknown field|Invalid option/,
+      );
+    }
+  });
+
   it("leaves the production to the minimizer when none is named", async () => {
     const compiler = getPageCompiler([
       moduleScriptMinify,
@@ -741,5 +802,24 @@ describe("the function an event handler body is minified inside", () => {
     expect(functionBody("function (){f(1)}")).toBeUndefined();
     expect(functionBody("function _(a){f(a)}")).toBeUndefined();
     expect(functionBody(undefined)).toBeUndefined();
+  });
+});
+
+describe("a handler body a minimizer does not answer with the function", () => {
+  it.each([
+    ["terserMinify", MinimizerPlugin.terserMinify],
+    ["uglifyJsMinify", MinimizerPlugin.uglifyJsMinify],
+    ["swcMinify", MinimizerPlugin.swcMinify],
+    ["esbuildMinify", MinimizerPlugin.esbuildMinify],
+  ])("keeps what it was written with under `%s`", async (name, minifier) => {
+    const compiler = getPageCompiler([brokenHandlerMinify, minifier]);
+    const stats = await compile(compiler);
+
+    // The body is a syntax error inside the function too, so nothing comes
+    // back to write and the attribute keeps the text it had.
+    expect(getErrors(stats)).toHaveLength(1);
+    expect(stats.compilation.getAsset("host.page").source.source()).toBe(
+      BROKEN_HANDLER_BODY,
+    );
   });
 });
