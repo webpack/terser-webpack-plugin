@@ -2604,7 +2604,8 @@ build instead of two. The options line up like this:
 
 | `image-minimizer-webpack-plugin`   | here                                              |
 | ---------------------------------- | ------------------------------------------------- |
-| `minimizer.implementation`         | [`minify`](#minify)                               |
+| `minimizer`                        | [`minify`](#minify), same shape                   |
+| `minimizer.implementation`         | `implementation` on that minimizer                |
 | `minimizer.options`                | `options` on that minimizer                       |
 | `minimizer.filter`                 | a `filter` on the minimizer itself                |
 | `generator[].implementation`       | [`generate`](#generate)                           |
@@ -2625,12 +2626,55 @@ The minimizers and generators keep their names —
 unmaintained, and `image-minimizer-webpack-plugin` already marked both
 deprecated.
 
-Two shapes changed rather than moved. Generators are **named** here instead of
-listed, because a name is what `?as=` asks for, so an array of two generators
-becomes an object of two entries. And a generator that produced a file beside
-the original is written with `type: "asset"`, which is the default there and
-not here — without it a generator re-encodes the module itself, which is what
-lets the import be renamed.
+A minimizer carries over as it is written: `minimizer` becomes
+[`minify`](#minify), with the same `{ implementation, options }` object, and an
+array of them stays an array.
+
+**Before**
+
+```js
+const ImageMinimizerPlugin = require("image-minimizer-webpack-plugin");
+
+module.exports = {
+  plugins: [
+    new ImageMinimizerPlugin({
+      test: /\.(jpe?g|png)$/i,
+      minimizer: {
+        implementation: ImageMinimizerPlugin.sharpMinify,
+        options: { encodeOptions: { jpeg: { quality: 80 } } },
+      },
+    }),
+  ],
+};
+```
+
+**After**
+
+```js
+const MinimizerPlugin = require("minimizer-webpack-plugin");
+
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        test: /\.(jpe?g|png)$/i,
+        minify: {
+          implementation: MinimizerPlugin.sharpMinify,
+          options: { encodeOptions: { jpeg: { quality: 80 } } },
+        },
+      }),
+    ],
+  },
+};
+```
+
+A generator is where two shapes changed rather than moved. Generators are
+**named** here instead of listed, because a name is what `?as=` asks for, so an
+array of two generators becomes an object of two entries. And a generator that
+produced a file beside the original is written with `type: "asset"`, which is
+the default there and not here — without it a generator re-encodes the module
+itself, which is what lets the import be renamed.
 
 **Before**
 
