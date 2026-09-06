@@ -15,6 +15,53 @@
 const path = require("path");
 
 /**
+ * Which production of a language an embedded body is written in, as `as` names
+ * it. A `style=""` is `css` with `as: "block-contents"`; JavaScript's are these
+ * three, and only the last is one no engine here parses on its own.
+ */
+const CLASSIC_SCRIPT = "script";
+const MODULE_SCRIPT = "module";
+const EVENT_HANDLER = "event-handler";
+
+/**
+ * The function a body handed out as an event handler belongs to. Named past any
+ * run of `_` the body holds, so nothing in it resolves to the function instead
+ * of what it meant; the newline ends a line comment the body may close with.
+ * @param {string} body the handler's text
+ * @returns {string} the script it is the body of
+ */
+function asFunction(body) {
+  const runs = body.match(/_+/g);
+  const longest = runs
+    ? runs.reduce((widest, run) => Math.max(widest, run.length), 0)
+    : 0;
+
+  return `function ${"_".repeat(longest + 1)}(){${body}\n}`;
+}
+
+/**
+ * The handler body inside the function a minimizer answered with. `undefined`
+ * for an answer that is not that function — one holding anything else, or one
+ * that dropped it whole as the unused declaration it is.
+ * @param {string | undefined} answered what the minimizer answered
+ * @returns {string | undefined} the body, or undefined
+ */
+function functionBody(answered) {
+  if (typeof answered !== "string") return undefined;
+
+  // Trimmed first: an engine may end what it writes with a newline, and a
+  // trailing `;` is the declaration's own rather than the body's.
+  const written = answered.trim().replace(/;$/, "");
+  const opened = written.indexOf("{");
+
+  return opened !== -1 &&
+    written.endsWith("}") &&
+    /^function\s+[^\s(]+\s*\(\s*\)\s*$/.test(written.slice(0, opened))
+    ? written.slice(opened + 1, -1).trim()
+    : undefined;
+}
+
+/**
  * The version a package reports. Read by walking up from its resolved entry
  * point rather than by requiring `<name>/package.json`, which a package whose
  * `exports` does not list that path — `sharp`, `svgo` and `imagemin` among them
@@ -207,6 +254,12 @@ async function terserMinify(
   minimizerOptions,
   extractComments,
 ) {
+  // Self-require rather than the bindings above: a minify function reaches a
+  // worker as its source, where this module's own scope is gone.
+  const { EVENT_HANDLER, MODULE_SCRIPT, asFunction, functionBody } =
+    // eslint-disable-next-line import/no-self-import
+    require("./utils.js");
+
   /**
    * @param {unknown} value value
    * @returns {value is EXPECTED_OBJECT} true when value is object or function
@@ -347,7 +400,9 @@ async function terserMinify(
       ...terserOptions,
       // `as` names which production of JavaScript the source is, and is the
       // source's own rather than the configuration's, so it overrides `module`.
-      ...(typeof as === "undefined" ? undefined : { module: as === "module" }),
+      ...(typeof as === "undefined"
+        ? undefined
+        : { module: as === MODULE_SCRIPT }),
       compress:
         typeof terserOptions.compress === "boolean"
           ? terserOptions.compress
@@ -377,12 +432,6 @@ async function terserMinify(
       sourceMap: undefined,
       // toplevel: terserOptions.toplevel
     });
-
-  const {
-    EVENT_HANDLER,
-    asFunction,
-    functionBody,
-  } = require("./production.js");
 
   // The production is the body's own, and a function body is the one terser has
   // no goal symbol for: it is minified as the function it belongs to.
@@ -496,6 +545,12 @@ async function uglifyJsMinify(
   minimizerOptions,
   extractComments,
 ) {
+  // Self-require rather than the bindings above: a minify function reaches a
+  // worker as its source, where this module's own scope is gone.
+  const { EVENT_HANDLER, MODULE_SCRIPT, asFunction, functionBody } =
+    // eslint-disable-next-line import/no-self-import
+    require("./utils.js");
+
   /**
    * @param {unknown} value value
    * @returns {boolean} true when value is object or function
@@ -642,7 +697,9 @@ async function uglifyJsMinify(
     // Need deep copy objects to avoid https://github.com/terser/terser/issues/366
     return {
       ...uglifyJsOptions,
-      ...(typeof as === "undefined" ? undefined : { module: as === "module" }),
+      ...(typeof as === "undefined"
+        ? undefined
+        : { module: as === MODULE_SCRIPT }),
       // warnings: uglifyJsOptions.warnings,
       parse: { ...uglifyJsOptions.parse },
       compress:
@@ -666,12 +723,6 @@ async function uglifyJsMinify(
       // keep_fnames: uglifyJsOptions.keep_fnames,
     };
   };
-
-  const {
-    EVENT_HANDLER,
-    asFunction,
-    functionBody,
-  } = require("./production.js");
 
   // A function body is the production uglify-js has no goal symbol for, so the
   // function it belongs to is what is minified.
@@ -766,6 +817,12 @@ uglifyJsMinify.filter = (name) => JS_FILE_RE.test(name);
  * @returns {Promise<MinimizedResult>} minimized result
  */
 async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
+  // Self-require rather than the bindings above: a minify function reaches a
+  // worker as its source, where this module's own scope is gone.
+  const { EVENT_HANDLER, MODULE_SCRIPT, asFunction, functionBody } =
+    // eslint-disable-next-line import/no-self-import
+    require("./utils.js");
+
   /**
    * @param {unknown} value value
    * @returns {boolean} true when value is object or function
@@ -875,7 +932,9 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
       ...swcOptions,
       // `as` names which production of JavaScript the source is, and is the
       // source's own rather than the configuration's, so it overrides `module`.
-      ...(typeof as === "undefined" ? undefined : { module: as === "module" }),
+      ...(typeof as === "undefined"
+        ? undefined
+        : { module: as === MODULE_SCRIPT }),
       compress:
         typeof swcOptions.compress === "boolean"
           ? swcOptions.compress
@@ -899,12 +958,6 @@ async function swcMinify(input, sourceMap, minimizerOptions, extractComments) {
 
       sourceMap: undefined,
     });
-
-  const {
-    EVENT_HANDLER,
-    asFunction,
-    functionBody,
-  } = require("./production.js");
 
   // A function body is the production swc has no goal symbol for, so the
   // function it belongs to is what is minified.
@@ -1026,6 +1079,12 @@ swcMinify.filter = (name) => JS_FILE_RE.test(name);
  * @returns {Promise<MinimizedResult>} minimized result
  */
 async function esbuildMinify(input, sourceMap, minimizerOptions) {
+  // Self-require rather than the bindings above: a minify function reaches a
+  // worker as its source, where this module's own scope is gone.
+  const { EVENT_HANDLER, MODULE_SCRIPT, asFunction, functionBody } =
+    // eslint-disable-next-line import/no-self-import
+    require("./utils.js");
+
   /**
    * @param {import("esbuild").TransformOptions & { ecma?: string | number, module?: boolean, as?: string }=} esbuildOptions esbuild options
    * @returns {import("esbuild").TransformOptions} built esbuild options
@@ -1036,7 +1095,7 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
     // `as` names which production of JavaScript the source is, and is the
     // source's own rather than the configuration's, so it overrides `module`.
     if (typeof esbuildOptions.as !== "undefined") {
-      esbuildOptions.module = esbuildOptions.as === "module";
+      esbuildOptions.module = esbuildOptions.as === MODULE_SCRIPT;
 
       delete esbuildOptions.as;
     }
@@ -1055,12 +1114,6 @@ async function esbuildMinify(input, sourceMap, minimizerOptions) {
       sourcemap: false,
     };
   };
-
-  const {
-    EVENT_HANDLER,
-    asFunction,
-    functionBody,
-  } = require("./production.js");
 
   // A function body is the production esbuild has no goal symbol for, so the
   // function it belongs to is what is minified.
@@ -3503,11 +3556,16 @@ function memoize(fn) {
 }
 
 module.exports = {
+  CLASSIC_SCRIPT,
+  EVENT_HANDLER,
+  MODULE_SCRIPT,
+  asFunction,
   cleanCssMinify,
   cssnanoMinify,
   cssoMinify,
   esbuildMinify,
   esbuildMinifyCss,
+  functionBody,
   getEcmaVersion,
   getMinimizerOptionsAt,
   htmlMinifierTerser,

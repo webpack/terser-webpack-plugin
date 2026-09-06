@@ -1,6 +1,7 @@
 import path from "path";
 
 import MinimizerPlugin from "../src";
+import { asFunction, functionBody } from "../src/utils";
 
 import {
   compile,
@@ -274,6 +275,41 @@ async function eventHandlerMinify(input, sourceMap, minimizerOptions) {
     ...answerDiagnostics([rendered]),
   };
 }
+
+/**
+ * A classic script: `with` is a syntax error in a module and in strict mode,
+ * so a body holding one says which production it was read as.
+ */
+const CLASSIC_BODY =
+  "var  o  =  { a : 1 } ;  with ( o ) { window.ran  =  a }\n";
+
+/**
+ * A document minifier handing out one bare `<script>`, the classic production.
+ * @param {{ [file: string]: string }} input a single `{ filename: code }` entry
+ * @param {undefined} sourceMap unused
+ * @param {{ renderEmbeddedSource: (source: string, info: { type: string, as?: string }) => Promise<EXPECTED_ANY> }} minimizerOptions minimizer options
+ * @returns {Promise<EXPECTED_ANY>} the body as its minimizer wrote it
+ */
+async function classicScriptMinify(input, sourceMap, minimizerOptions) {
+  const rendered = await askRenderer(
+    minimizerOptions.renderEmbeddedSource,
+    CLASSIC_BODY,
+    "javascript",
+    "script",
+  );
+  const text = answerText(rendered);
+
+  return {
+    code: typeof text === "string" ? text : CLASSIC_BODY,
+    ...answerDiagnostics([rendered]),
+  };
+}
+
+classicScriptMinify.getTypes = () => ["page"];
+classicScriptMinify.getEmbeddedTypes = () => ["javascript"];
+classicScriptMinify.supportsWorker = () => false;
+classicScriptMinify.supportsWorkerThreads = () => false;
+classicScriptMinify.filter = (name) => /\.page$/i.test(name);
 
 eventHandlerMinify.getTypes = () => ["page"];
 eventHandlerMinify.getEmbeddedTypes = () => ["javascript"];
@@ -651,4 +687,59 @@ describe("a body handed out as an event handler", () => {
       expect(readAsset("host.page", compiler, stats)).toBe("return!1");
     },
   );
+});
+
+describe("a body handed out as a classic script", () => {
+  it.each([
+    ["terserMinify", MinimizerPlugin.terserMinify],
+    ["uglifyJsMinify", MinimizerPlugin.uglifyJsMinify],
+    ["swcMinify", MinimizerPlugin.swcMinify],
+    ["esbuildMinify", MinimizerPlugin.esbuildMinify],
+  ])("is read as one by `%s`", async (name, minifier) => {
+    const compiler = getPageCompiler([classicScriptMinify, minifier]);
+    const stats = await compile(compiler);
+
+    expect(getErrors(stats)).toEqual([]);
+    expect(readAsset("host.page", compiler, stats)).toMatchSnapshot();
+  });
+});
+
+describe("the function an event handler body is minified inside", () => {
+  it("makes the body a whole script an engine can read", () => {
+    expect(asFunction("return  false")).toBe("function _(){return  false\n}");
+  });
+
+  it("names the function past any run of `_` the body holds", () => {
+    // A body naming the same binding would resolve to the function around it
+    // rather than to what it meant.
+    expect(asFunction("_( __ )")).toBe("function ___(){_( __ )\n}");
+    expect(asFunction("f(_____)")).toBe("function ______(){f(_____)\n}");
+  });
+
+  it("ends a line comment the body closes with", () => {
+    // Without the newline the brace closing the function would be inside the
+    // comment, and nothing could parse what it was handed.
+    expect(asFunction("f( 1 ) // done")).toBe("function _(){f( 1 ) // done\n}");
+  });
+
+  it("reads the body back out of what a minimizer answered", () => {
+    expect(functionBody("function _(){f(1)}")).toBe("f(1)");
+    expect(functionBody("function ___ ( ) { f(1) }")).toBe("f(1)");
+    // `esbuild` writes the newline, and a declaration may be printed with the
+    // semicolon that never belonged to the body.
+    expect(functionBody("function _(){return!1}\n")).toBe("return!1");
+    expect(functionBody("function _(){return!1};")).toBe("return!1");
+  });
+
+  it("declines an answer that is not that one function", () => {
+    // Text around it, a second statement, and the empty answer a minimizer
+    // dropping an unused declaration gives.
+    expect(functionBody("f(1)")).toBeUndefined();
+    expect(functionBody("function _(){f(1)}g()")).toBeUndefined();
+    expect(functionBody("g();function _(){f(1)}")).toBeUndefined();
+    expect(functionBody("")).toBeUndefined();
+    expect(functionBody("function (){f(1)}")).toBeUndefined();
+    expect(functionBody("function _(a){f(a)}")).toBeUndefined();
+    expect(functionBody(undefined)).toBeUndefined();
+  });
 });
