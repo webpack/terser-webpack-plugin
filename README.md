@@ -31,13 +31,15 @@ JSON minimizer:
 
 HTML minimizers:
 
-- [`html-minifier-terser`](https://github.com/terser/html-minifier-terser) — `MinimizerPlugin.htmlMinifierTerser`. The default HTML minimizer. JavaScript-based, no native dependency. Requires `npm install --save-dev html-minifier-terser`.
+- webpack's own — `webpack.html.syntax.htmlMinify`. Ships with webpack (`>= 5.111.0`), so it needs no extra dependency, and it is the one that minifies what a document nests: an inline `<style>`, every `style=""`, a `<script>`, an `<svg>` subtree. See [webpack's own minimizers](#webpacks-own-minimizers).
+- [`html-minifier-terser`](https://github.com/terser/html-minifier-terser) — `MinimizerPlugin.htmlMinifierTerser`. JavaScript-based, no native dependency. Requires `npm install --save-dev html-minifier-terser`.
 - [`@swc/html`](https://github.com/swc-project/swc) — `MinimizerPlugin.swcMinifyHtml` (full HTML documents) and `MinimizerPlugin.swcMinifyHtmlFragment` (HTML fragments, e.g. `<template>` content). Very fast Rust-based platform for the Web. Requires `npm install --save-dev @swc/html`.
 - [`@minify-html/node`](https://github.com/wilsonzlin/minify-html) — `MinimizerPlugin.minifyHtmlNode`. A Rust HTML minifier optimised for speed and effectiveness. Requires `npm install --save-dev @minify-html/node`.
 
 CSS minimizers:
 
-- [`cssnano`](https://cssnano.github.io/cssnano/) — `MinimizerPlugin.cssnanoMinify`. The default CSS minimizer. Built on top of [PostCSS](https://postcss.org/). Requires `npm install --save-dev cssnano postcss`.
+- webpack's own — `webpack.css.syntax.cssMinify`. Ships with webpack (`>= 5.111.0`), so it needs no extra dependency, and it minifies the CSS a stylesheet or a document nests. See [webpack's own minimizers](#webpacks-own-minimizers).
+- [`cssnano`](https://cssnano.github.io/cssnano/) — `MinimizerPlugin.cssnanoMinify`. Built on top of [PostCSS](https://postcss.org/). Requires `npm install --save-dev cssnano postcss`.
 - [`csso`](https://github.com/css/csso) — `MinimizerPlugin.cssoMinify`. A CSS minifier with structural optimisations. Requires `npm install --save-dev csso`.
 - [`clean-css`](https://github.com/clean-css/clean-css) — `MinimizerPlugin.cleanCssMinify`. A widely-used CSS optimiser. Requires `npm install --save-dev clean-css`.
 - [`esbuild`](https://github.com/evanw/esbuild) — `MinimizerPlugin.esbuildMinifyCss`. Very fast CSS minification using esbuild's CSS loader. Requires `npm install --save-dev esbuild`.
@@ -55,9 +57,10 @@ These only minify — they never change an image's format or name; see
 [Images](#images).
 
 All of the non-default minimizers are declared as **optional** peer
-dependencies — install only the ones you actually use. You can also stack
-multiple `MinimizerPlugin` instances in the same build to handle different
-file types with different minimizers (see [Examples](#examples)).
+dependencies — install only the ones you actually use. One plugin instance
+covers several languages at once: give [`minify`](#minify) an array and each
+minimizer is offered only the assets its own `filter` accepts, so JS, CSS,
+HTML and JSON share a single worker pool (see [Examples](#examples)).
 
 ## Getting Started
 
@@ -118,7 +121,7 @@ Using supported `devtool` values enable source map generation.
 - **[`exclude`](#exclude)**
 - **[`parallel`](#parallel)**
 - **[`minify`](#minify)**
-- **[`minimizerOptions`](#minimizeroptions)**
+- **[`minimizerOptions`](#minimizeroptions)** (deprecated)
 - **[`generate`](#generate)**
 - **[`extractComments`](#extractcomments)**
 
@@ -330,61 +333,147 @@ type minify = minifyFn | (minifyFn | minimizer)[] | minimizer;
 
 Default: `MinimizerPlugin.terserMinify`
 
-Allows you to override the default minify function.
-By default plugin uses [terser](https://github.com/terser/terser) package.
-Useful for using and testing unpublished versions or forks.
-
-A minimizer can be written as an object instead, which is where its own
-options live — one minimizer configured in one place. Several minimizers are
-an array of them, rather than one object holding two lists that have to line
-up:
-
-```js
-new MinimizerPlugin({
-  minify: {
-    implementation: MinimizerPlugin.swcMinify,
-    options: { mangle: false },
-  },
-});
-```
-
-An array of functions can also be provided. Each minimizer can expose a
-`filter(name, info)` helper that decides whether it should run on a given
-asset; the plugin dispatches each asset only to the minimizers whose `filter`
-accepts it (or runs them all when no filter is set). All built-in minimizers
-ship with a `filter` that matches their natural extension, so a single plugin
-instance and a single worker pool can handle JS, CSS, HTML and JSON together
-without juggling multiple `MinimizerPlugin` instances — just widen `test` to
-let those asset types reach the dispatcher:
-
-```js
-new MinimizerPlugin({
-  test: /\.(?:[cm]?js|css|html?|json)(\?.*)?$/i,
-  minify: [
-    MinimizerPlugin.terserMinify,
-    MinimizerPlugin.cssnanoMinify,
-    MinimizerPlugin.htmlMinifierTerser,
-    MinimizerPlugin.jsonMinify,
-  ],
-});
-```
-
-When more than one minimizer in the array claims the same asset, the chain
-semantic still applies: the output of each accepting minimizer is fed as
-input to the next. A minimizer written as an object carries its own
-`options`; the deprecated [`minimizerOptions`](#minimizeroptions) may still be
-an array (index-paired with `minify`) or one object reused by every
-minimizer.
-
-The `test` option always defaults to `/\.[cm]?js(\?.*)?$/i`. When you mix
-asset types in a single plugin instance, widen `test` so non-JS assets reach
-the dispatcher (for example `test: /\.(?:[cm]?js|css|html?|json)(\?.*)?$/i`).
+Which minimizer runs, and the options it runs with. By default the plugin uses
+[terser](https://github.com/terser/terser); overriding it is also how you test
+an unpublished version or a fork.
 
 > **Warning**
 >
 > **Always use `require` inside `minify` function when `parallel` option enabled**.
 
+#### `object`
+
+The form to prefer: the minimizer and its own options in one place.
+
+**webpack.config.js**
+
+```js
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        minify: {
+          implementation: MinimizerPlugin.swcMinify,
+          options: { mangle: false },
+        },
+      }),
+    ],
+  },
+};
+```
+
+`options` reaches the minify function as its third argument, and what it takes
+is that minimizer's own: Terser's
+[minify options](https://github.com/terser/terser#minify-options) for the
+default one, and the tables in
+[webpack's own minimizers](#webpacks-own-minimizers) for `cssMinify` and
+`htmlMinify`.
+
+Two keys are filled in before a minimizer sees them, and only when `options`
+does not set them itself: `ecma`, from
+[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment),
+and `module`, from the asset's own `javascriptModule` info or its `.mjs` /
+`.cjs` extension. Setting either yourself wins, including `module: false`.
+
+<details>
+<summary>The default minimizer's options, written out</summary>
+
+```js
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: {
+            ecma: undefined,
+            parse: {},
+            compress: {},
+            mangle: true, // Note `mangle.properties` is `false` by default.
+            module: false,
+            // Deprecated
+            output: null,
+            format: null,
+            toplevel: false,
+            nameCache: null,
+            ie8: false,
+            keep_classnames: undefined,
+            keep_fnames: false,
+            safari10: false,
+          },
+        },
+      }),
+    ],
+  },
+};
+```
+
+</details>
+
+#### `array`
+
+Several minimizers are an array of objects, rather than one object holding two
+lists that have to line up. Each asset is dispatched to the minimizers whose
+`filter` accepts it, and when more than one accepts the same asset the output
+of each is fed to the next (the chain semantic). Warnings, errors and extracted
+comments from all of them are merged.
+
+**webpack.config.js**
+
+```js
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        minify: [
+          {
+            implementation: MinimizerPlugin.terserMinify,
+            options: { mangle: false },
+          },
+          { implementation: MinimizerPlugin.swcMinify },
+        ],
+      }),
+    ],
+  },
+};
+```
+
+This is what lets **one plugin instance and one worker pool** handle every
+asset type: each built-in ships with a `filter` matching its natural
+extension, so JS, CSS, HTML and JSON need no second instance. `test` still
+defaults to JS only, so widen it to let the other assets reach the dispatcher:
+
+```js
+module.exports = {
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new MinimizerPlugin({
+        test: /\.(?:[cm]?js|css|html?|json)(\?.*)?$/i,
+        minify: [
+          { implementation: MinimizerPlugin.terserMinify },
+          { implementation: MinimizerPlugin.cssnanoMinify },
+          { implementation: MinimizerPlugin.htmlMinifierTerser },
+          { implementation: MinimizerPlugin.jsonMinify },
+        ],
+      }),
+    ],
+  },
+};
+```
+
+Pair it with [webpack's own](#webpacks-own-minimizers) `cssMinify` and
+`htmlMinify` and the source a document or a stylesheet nests inside itself is
+minified too — see [Embedded source](#embedded-source).
+
 #### `function`
+
+A bare function is shorthand for an object with no `options`. A custom one
+says what it can do through properties on the function itself — each optional,
+and each answering a question the plugin would otherwise have to guess at.
 
 **webpack.config.js**
 
@@ -423,6 +512,11 @@ minify.getMinimizerVersion = () => {
 // accept it. Returning `undefined` is treated as accept.
 minify.filter = (name) => /\.[cm]?js(\?.*)?$/i.test(name);
 
+// The languages this minimizer minifies. Source a module embeds in another
+// language carries no filename, so `filter` cannot dispatch it and this does
+// — a function without it is never handed any.
+minify.getTypes = () => ["javascript"];
+
 // Declare this when the minimizer reads the asset's bytes rather than its
 // text — an image minimizer. Its `input` values then arrive as a `Buffer` and
 // its `code` may be one. Only applied when every minimizer an asset is
@@ -444,152 +538,73 @@ module.exports = {
 };
 ```
 
-#### `array`
-
-If an array of functions is passed to the `minify` option, each asset is
-dispatched to the minimizers whose `filter` accepts it. When more than one
-minimizer accepts the same asset the output of each is fed as input to the
-next one (the chain semantic). Each entry may be the minimizer itself or an
-object carrying that minimizer's own `options`. Warnings, errors and extracted
-comments from all running minimizers are merged together.
-
-**webpack.config.js**
+A minifier that **nests other languages inside what it prints** — a document
+with an inline `<style>`, a stylesheet with a `data:` URL — hands each nested
+body out instead of minifying it itself. It declares which languages it can
+offer, and the plugin passes `renderEmbeddedSource` in its options when
+something else claims one of them:
 
 ```js
-module.exports = {
-  optimization: {
-    minimize: true,
-    minimizer: [
-      new MinimizerPlugin({
-        minify: [
-          {
-            implementation: MinimizerPlugin.terserMinify,
-            options: { mangle: false },
-          },
-          { implementation: MinimizerPlugin.swcMinify },
-        ],
-      }),
-    ],
-  },
-};
+async function myHtmlMinify(input, sourceMap, minimizerOptions) {
+  const [[, code]] = Object.entries(input);
+  const { renderEmbeddedSource } = minimizerOptions;
+
+  // Absent when nothing configured claims a language this minifier offers
+  const minifyStyle = async (css) => {
+    const result = renderEmbeddedSource
+      ? await renderEmbeddedSource(css, { type: "css" })
+      : undefined;
+
+    // Declining leaves the body exactly as it was written
+    return result && typeof result.code === "string" ? result.code : css;
+  };
+
+  return { code: await print(code, minifyStyle) };
+}
+
+// The languages this minifier can hand out, given the options it will run with
+myHtmlMinify.getEmbeddedTypes = (minimizerOptions) => ["css", "javascript"];
 ```
 
-A single plugin instance can also handle multiple asset types — the built-in
-minimizers each ship with a `filter` matching their natural extension, so JS,
-CSS, HTML and JSON can all be minified by one shared worker pool:
-
-```js
-module.exports = {
-  optimization: {
-    minimize: true,
-    minimizer: [
-      new MinimizerPlugin({
-        // `test` still defaults to JS only, so widen it to catch every
-        // asset type you want the dispatcher to consider.
-        test: /\.(?:[cm]?js|css|html?|json)(\?.*)?$/i,
-        minify: [
-          MinimizerPlugin.terserMinify,
-          MinimizerPlugin.cssnanoMinify,
-          MinimizerPlugin.htmlMinifierTerser,
-          MinimizerPlugin.jsonMinify,
-        ],
-      }),
-    ],
-  },
-};
-```
+`renderEmbeddedSource(source, { type, as })` answers
+`{ code?, warnings?, errors? }` or `undefined`, and recurses — a body that
+nests something of its own is reached too. `as` says which production of
+`type` the body is; a `style=""` is `"block-contents"` rather than a whole
+stylesheet. [Embedded source](#embedded-source) has the whole picture.
 
 ### `minimizerOptions`
+
+> **Note**
+>
+> **Deprecated**, and to be removed in the next major release. Give a
+> minimizer its options in [`minify`](#minify) instead, which keeps one
+> minimizer's configuration in one place. It keeps working, and setting the
+> options for one minimizer in both places is an error.
 
 Type:
 
 ```ts
-interface minimizerOptions {
-  compress?: boolean | CompressOptions;
-  ecma?: ECMA;
-  enclose?: boolean | string;
-  ie8?: boolean;
-  keep_classnames?: boolean | RegExp;
-  keep_fnames?: boolean | RegExp;
-  mangle?: boolean | MangleOptions;
-  module?: boolean;
-  nameCache?: object;
-  format?: FormatOptions;
-  /** @deprecated */
-  output?: FormatOptions;
-  parse?: ParseOptions;
-  safari10?: boolean;
-  sourceMap?: boolean | SourceMapOptions;
-  toplevel?: boolean;
-}
-
-type options = minimizerOptions | minimizerOptions[];
+type minimizerOptions = Record<string, any> | Record<string, any>[];
 ```
 
-Default: [default](https://github.com/terser/terser#minify-options)
+Default: [Terser's](https://github.com/terser/terser#minify-options)
 
-> **Note**
->
-> `minimizerOptions` is deprecated in favour of a minimizer's own `options`,
-> which keeps one minimizer's configuration in one place — see
-> [`minify`](#minify). It keeps working, and setting both for the same
-> minimizer is an error. It is still the way to configure the **default**
-> minimizer without naming it.
-
-Options for the active minimizer, whichever of the two places they are given
-in. With the default Terser minify, see Terser's
-[minify options](https://github.com/terser/terser#minify-options).
-
-When the [`minify`](#minify) option is an array of minimizers,
-`minimizerOptions` can also be an array. Each element is passed to the
-minimizer at the same index in the `minify` array. If a single object is
-provided instead, it is reused for every minimizer.
-
-Two keys are filled in before a minimizer sees them, and only when the options
-do not already set them: `ecma`, from
-[`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment),
-and `module`, from the asset's own `javascriptModule` info or its `.mjs` /
-`.cjs` extension. Setting either yourself wins, including `module: false`.
-
-> **Note**
->
-> `terserOptions` is kept as a deprecated alias of `minimizerOptions` for
-> backwards compatibility — passing either is equivalent. If both are set,
-> `minimizerOptions` wins. Both are on their way out: prefer a minimizer's own
-> `options` in new code.
-
-**webpack.config.js**
+Options for the active minimizer, given away from it. With an array of
+minimizers it may be an array too — each element goes to the minimizer at the
+same index — or one object every minimizer is handed. It is still the only way
+to configure the **default** minimizer without naming it:
 
 ```js
 module.exports = {
   optimization: {
     minimize: true,
-    minimizer: [
-      new MinimizerPlugin({
-        minify: {
-          implementation: MinimizerPlugin.terserMinify,
-          options: {
-            ecma: undefined,
-            parse: {},
-            compress: {},
-            mangle: true, // Note `mangle.properties` is `false` by default.
-            module: false,
-            // Deprecated
-            output: null,
-            format: null,
-            toplevel: false,
-            nameCache: null,
-            ie8: false,
-            keep_classnames: undefined,
-            keep_fnames: false,
-            safari10: false,
-          },
-        },
-      }),
-    ],
+    minimizer: [new MinimizerPlugin({ minimizerOptions: { mangle: false } })],
   },
 };
 ```
+
+`terserOptions` is a deprecated alias of it — passing either is equivalent, and
+`minimizerOptions` wins if both are set.
 
 ### `generate`
 
@@ -801,7 +816,7 @@ generator is an error rather than a field that quietly does nothing.
 `ecma` is filled in from
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
 unless a generator's options set it, the same way it is for a minimizer's —
-see [`minimizerOptions`](#minimizeroptions).
+see [`minify`](#minify).
 
 `filename` is a
 [webpack filename template](https://webpack.js.org/configuration/output/#outputfilename)
@@ -1145,12 +1160,13 @@ function states for itself:
 myCssMinifier.getTypes = () => ["css"];
 ```
 
-The built-ins declare `javascript` (`terserMinify`, `uglifyJsMinify`,
-`swcMinify`, `esbuildMinify`), `css` (`cssnanoMinify`, `cssoMinify`,
-`cleanCssMinify`, `esbuildMinifyCss`, `lightningCssMinify`, `swcMinifyCss`),
-`html` (`htmlMinifierTerser`, `swcMinifyHtml`, `swcMinifyHtmlFragment`,
-`minifyHtmlNode`) and `json` (`jsonMinify`); webpack's own `cssMinify` and
-`htmlMinify` declare `css` and `html`. A language **no configured minimizer
+webpack's own `cssMinify` and `htmlMinify` declare `css` and `html`, and are
+the two that hand out what they nest. The built-ins declare `javascript`
+(`terserMinify`, `uglifyJsMinify`, `swcMinify`, `esbuildMinify`), `css`
+(`cssnanoMinify`, `cssoMinify`, `cleanCssMinify`, `esbuildMinifyCss`,
+`lightningCssMinify`, `swcMinifyCss`), `html` (`htmlMinifierTerser`,
+`swcMinifyHtml`, `swcMinifyHtmlFragment`, `minifyHtmlNode`) and `json`
+(`jsonMinify`). A language **no configured minimizer
 claims — `svg` out of the box — is emitted exactly as it was written**, and a
 custom minify function without `getTypes` is never handed embedded source at
 all.
@@ -1365,11 +1381,11 @@ minimizers and set `test` to match your HTML files.
 
 Available HTML minimizers:
 
+- `webpack.html.syntax.htmlMinify` — webpack's own, shipped with webpack itself, so it needs no extra dependency. The one that can minify what a document nests — an inline `<style>`, a `<script>`, an `<svg>`. See [webpack's own minimizers](#webpacks-own-minimizers).
 - `MinimizerPlugin.htmlMinifierTerser` — uses [`html-minifier-terser`](https://github.com/terser/html-minifier-terser).
 - `MinimizerPlugin.swcMinifyHtml` — uses [`@swc/html`](https://github.com/swc-project/swc) for full HTML documents (with doctype and `<html>`/`<head>`/`<body>` tags).
 - `MinimizerPlugin.swcMinifyHtmlFragment` — uses [`@swc/html`](https://github.com/swc-project/swc) for HTML fragments (e.g. content inside `<template></template>` or partial HTML strings).
 - `MinimizerPlugin.minifyHtmlNode` — uses [`@minify-html/node`](https://github.com/wilsonzlin/minify-html).
-- `webpack.html.syntax.htmlMinify` — webpack's own HTML minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The HTML minimizers are optional peer dependencies — install only the one
 you actually use:
@@ -1399,7 +1415,7 @@ npm install --save-dev @minify-html/node
 
 #### `html-minifier-terser`
 
-[`html-minifier-terser`](https://github.com/terser/html-minifier-terser) is a JavaScript-based HTML minifier with no native dependency. It's the default HTML minimizer.
+[`html-minifier-terser`](https://github.com/terser/html-minifier-terser) is a JavaScript-based HTML minifier with no native dependency.
 
 **webpack.config.js**
 
@@ -1523,13 +1539,13 @@ minimizers and set `test` to match your CSS files.
 
 Available CSS minimizers:
 
+- `webpack.css.syntax.cssMinify` — webpack's own, shipped with webpack itself, so it needs no extra dependency. The one that can minify the CSS a document nests. See [webpack's own minimizers](#webpacks-own-minimizers).
 - `MinimizerPlugin.cssnanoMinify` — uses [`cssnano`](https://cssnano.github.io/cssnano/) (via [`postcss`](https://postcss.org/)).
 - `MinimizerPlugin.cssoMinify` — uses [`csso`](https://github.com/css/csso).
 - `MinimizerPlugin.cleanCssMinify` — uses [`clean-css`](https://github.com/clean-css/clean-css).
 - `MinimizerPlugin.esbuildMinifyCss` — uses [`esbuild`](https://github.com/evanw/esbuild) with the CSS loader.
 - `MinimizerPlugin.lightningCssMinify` — uses [`lightningcss`](https://github.com/parcel-bundler/lightningcss).
 - `MinimizerPlugin.swcMinifyCss` — uses [`@swc/css`](https://github.com/swc-project/swc).
-- `webpack.css.syntax.cssMinify` — webpack's own CSS minifier, shipped with webpack itself. See [webpack's own minimizers](#webpacks-own-minimizers).
 
 The CSS minimizers are optional peer dependencies — install only the ones
 you actually use:
@@ -1556,7 +1572,7 @@ npm install --save-dev @swc/css
 
 #### `cssnano`
 
-[`cssnano`](https://cssnano.github.io/cssnano/) is the default CSS minimizer. It runs as a [PostCSS](https://postcss.org/) plugin.
+[`cssnano`](https://cssnano.github.io/cssnano/) runs as a [PostCSS](https://postcss.org/) plugin.
 
 **webpack.config.js**
 
@@ -2374,28 +2390,44 @@ Override the default minify function - use `uglify-js` for minification.
 **webpack.config.js**
 
 ```js
+const minifyWithUglifyJs = (file, sourceMap, minimizerOptions) => {
+  const uglifyJsOptions = { ...minimizerOptions };
+
+  // The plugin fills these two in, and `uglify-js` rejects options it does not know
+  delete uglifyJsOptions.ecma;
+  delete uglifyJsOptions.module;
+
+  if (sourceMap) {
+    uglifyJsOptions.sourceMap = { content: sourceMap };
+  }
+
+  return require("uglify-js").minify(file, uglifyJsOptions);
+};
+
+// Which assets it is offered, and which language it minifies. Without
+// `getTypes` it is never handed the JavaScript a document or a module embeds
+minifyWithUglifyJs.filter = (name) => /\.[cm]?js(\?.*)?$/i.test(name);
+minifyWithUglifyJs.getTypes = () => ["javascript"];
+
 module.exports = {
   optimization: {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minify: (file, sourceMap) => {
+        minify: {
+          implementation: minifyWithUglifyJs,
           // https://github.com/mishoo/UglifyJS2#minify-options
-          const uglifyJsOptions = {/* your `uglify-js` package options */};
-
-          if (sourceMap) {
-            uglifyJsOptions.sourceMap = {
-              content: sourceMap,
-            };
-          }
-
-          return require("uglify-js").minify(file, uglifyJsOptions);
+          options: {/* your `uglify-js` package options */},
         },
       }),
     ],
   },
 };
 ```
+
+A minifier that nests other languages inside its own output hands each body
+out with `renderEmbeddedSource` rather than minifying it itself — see
+[`minify`](#minify) and [Embedded source](#embedded-source).
 
 ### Typescript
 
