@@ -389,7 +389,7 @@ the dispatcher (for example `test: /\.(?:[cm]?js|css|html?|json)(\?.*)?$/i`).
 ```js
 // Can be async
 const minify = (input, sourceMap, minimizerOptions, extractsComments) => {
-  // The `minimizerOptions` argument contains options from the `minimizerOptions` plugin option
+  // Whatever the `minify` option's `options` holds reaches the third argument
   // You can use `minimizerOptions.myCustomOption`
 
   // Custom logic for extract comments
@@ -432,10 +432,10 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          myCustomOption: true,
+        minify: {
+          implementation: minify,
+          options: { myCustomOption: true },
         },
-        minify,
       }),
     ],
   },
@@ -559,7 +559,8 @@ and `module`, from the asset's own `javascriptModule` info or its `.mjs` /
 >
 > `terserOptions` is kept as a deprecated alias of `minimizerOptions` for
 > backwards compatibility — passing either is equivalent. If both are set,
-> `minimizerOptions` wins. Prefer `minimizerOptions` in new code.
+> `minimizerOptions` wins. Both are on their way out: prefer a minimizer's own
+> `options` in new code.
 
 **webpack.config.js**
 
@@ -569,21 +570,24 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          ecma: undefined,
-          parse: {},
-          compress: {},
-          mangle: true, // Note `mangle.properties` is `false` by default.
-          module: false,
-          // Deprecated
-          output: null,
-          format: null,
-          toplevel: false,
-          nameCache: null,
-          ie8: false,
-          keep_classnames: undefined,
-          keep_fnames: false,
-          safari10: false,
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: {
+            ecma: undefined,
+            parse: {},
+            compress: {},
+            mangle: true, // Note `mangle.properties` is `false` by default.
+            module: false,
+            // Deprecated
+            output: null,
+            format: null,
+            toplevel: false,
+            nameCache: null,
+            ie8: false,
+            keep_classnames: undefined,
+            keep_fnames: false,
+            safari10: false,
+          },
         },
       }),
     ],
@@ -739,8 +743,8 @@ interchangeable:
 
 `ecma` is filled in from
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)
-unless a generator's options set it, the same way it is for
-[`minimizerOptions`](#minimizeroptions).
+unless a generator's options set it, the same way it is for a minimizer's —
+see [`minimizerOptions`](#minimizeroptions).
 
 `filename` is a
 [webpack filename template](https://webpack.js.org/configuration/output/#outputfilename)
@@ -833,7 +837,7 @@ By default, extract only comments using `/^\**!|@preserve|@license|@cc_on/i` Reg
 
 If the original file is named `foo.js`, then the comments will be stored to `foo.js.LICENSE.txt`.
 
-The `minimizerOptions.format.comments` option specifies whether the comment will be preserved - i.e., it is possible to preserve some comments (e.g. annotations) while extracting others, or even preserve comments that have already been extracted.
+A minimizer's `options.format.comments` specifies whether the comment will be preserved - i.e., it is possible to preserve some comments (e.g. annotations) while extracting others, or even preserve comments that have already been extracted.
 
 #### `boolean`
 
@@ -1147,10 +1151,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          format: {
-            comments: /@license/i,
-          },
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: { format: { comments: /@license/i } },
         },
         extractComments: true,
       }),
@@ -1171,10 +1174,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          format: {
-            comments: false,
-          },
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: { format: { comments: false } },
         },
         extractComments: false,
       }),
@@ -1708,7 +1710,7 @@ through their own `filter`, and both run in the worker pool.
 | `filter`                  | `/\.css(\?.*)?$/i`                         | `/\.html(\?.*)?$/i`                        |
 | `supportsWorkerThreads()` | `true`                                     | `true`                                     |
 
-`minimizerOptions` is `optimization.minimize.css` and
+Their `options` are `optimization.minimize.css` and
 `optimization.minimize.html` respectively. `environment` carries what the
 target can read (`{ browsers, vendorPrefixes }`, the CSS entries of
 [`output.environment`](https://webpack.js.org/configuration/output/#outputenvironment)),
@@ -1791,7 +1793,7 @@ inline agree about the target:
 ```js
 const environment = { browsers: ["chrome 100", "safari 15"] };
 
-const minimizerOptions = [
+const options = [
   {},
   // cssMinify
   { environment, convertLengthUnits: true },
@@ -2202,10 +2204,10 @@ import banner from "./banner.png?width=320&quality=80";
 
 A **flag** is on when it is present — `?flip` — and reads `true`/`1`/`yes` the
 same way, `false`/`0`/`no` the other. `greyscale` and `grey` spell `grayscale`,
-`auto` on `width` or `height` drops one set in `minimizerOptions`, and a
+`auto` on `width` or `height` drops one set in the minimizer's `options`, and a
 parameter can be spelled in any case.
 
-Every one of these can also be set in `minimizerOptions`; the name wins where
+Every one of these can also be set in the minimizer's `options`; the name wins where
 both say something, being the more specific of the two. `resize: { enabled:
 false }` still turns resizing off entirely.
 
@@ -2358,8 +2360,9 @@ module.exports = {
     minimize: true,
     minimizer: [
       new MinimizerPlugin({
-        minimizerOptions: {
-          compress: true,
+        minify: {
+          implementation: MinimizerPlugin.terserMinify,
+          options: { compress: true },
         },
       }),
     ],

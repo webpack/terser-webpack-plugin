@@ -2283,6 +2283,8 @@ function isDescriptor(entry) {
  * @returns {{ implementation: EXPECTED_ANY, options: EXPECTED_ANY }} the pair
  */
 function normalizeMinimizers(minify, declared) {
+  // TODO drop the `declared` fallback in the next major release, with the
+  // deprecated `minimizerOptions` it carries.
   if (Array.isArray(minify)) {
     if (!minify.some(isDescriptor)) {
       return { implementation: minify, options: declared };
