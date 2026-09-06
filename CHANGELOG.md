@@ -1,5 +1,33 @@
 # Changelog
 
+## 5.10.0
+
+### Minor Changes
+
+- Allow a minimizer in `minify` to state its own `filter`. (by [@alexander-akait](https://github.com/alexander-akait) in [#729](https://github.com/webpack/minimizer-webpack-plugin/pull/729))
+
+- Reject `filename`, `filter` and `deleteOriginalAssets` on a generator that is not `type: "asset"`, where they did nothing. (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+- Support `[width]` and `[height]` in an `asset` generator's `filename`, and document migrating from `image-minimizer-webpack-plugin`. (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+- Allow a named generator to be an object with `type: "asset"`, `filename`, `filter` and `deleteOriginalAssets`, which generates a new asset beside an emitted one. (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+- Take a generator's options from `generate` itself, deprecating `generatorOptions`; giving both for one generator, or naming no generator, is now an error. (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+- let `generate` name its generators, so an asset can pick one with `?as=<preset>` and each preset carry its own `generatorOptions` (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+- add the `imageminGenerate` generator, which runs the `imagemin` plugins you name and renames the asset to the format they wrote (by [@alexander-akait](https://github.com/alexander-akait) in [#723](https://github.com/webpack/minimizer-webpack-plugin/pull/723))
+
+- Take a minimizer's options from `minify` itself, deprecating `minimizerOptions`; giving both for one minimizer is now an error. (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+- A minimizer or generator written as an object names one implementation; several are an array of such objects rather than one holding two lists that must line up. (by [@alexander-akait](https://github.com/alexander-akait) in [#727](https://github.com/webpack/minimizer-webpack-plugin/pull/727))
+
+### Patch Changes
+
+- read `as` on an embedded JavaScript body: the built-in minimizers take `module` as their own option and minify an `event-handler` body as the function it belongs to, so neither production is read as a classic script and no engine is handed the word (by [@alexander-akait](https://github.com/alexander-akait) in [#726](https://github.com/webpack/minimizer-webpack-plugin/pull/726))
+
+- invalidate the persistent cache when `generate` or `generatorOptions` change, so a restored module no longer keeps the previous generator's bytes and name (by [@alexander-akait](https://github.com/alexander-akait) in [#722](https://github.com/webpack/minimizer-webpack-plugin/pull/722))
+
 ## 5.9.0
 
 ### Minor Changes
